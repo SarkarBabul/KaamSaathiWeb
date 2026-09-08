@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="/sitemap.xsl"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  <url>
+    <loc>https://kaamsaathi.app/</loc>
+    <lastmod>2026-09-07</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://kaamsaathi.app/"/>
+    <xhtml:link rel="alternate" hreflang="hi" href="https://kaamsaathi.app/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://kaamsaathi.app/"/>
+  </url>
+  <url>
+    <loc>https://kaamsaathi.app/features</loc>
+    <lastmod>2026-09-07</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://kaamsaathi.app/pricing</loc>
+    <lastmod>2026-09-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://kaamsaathi.app/faq</loc>
+    <lastmod>2026-09-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://kaamsaathi.app/blog</loc>
+    <lastmod>2026-09-07</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://kaamsaathi.app/schedule-demo</loc>
+    <lastmod>2026-09-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://kaamsaathi.app/worker-attendance-app</loc>
+    <lastmod>2026-09-07</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://kaamsaathi.app/labour-management-app</loc>
+    <lastmod>2026-09-07</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://kaamsaathi.app/contractor-attendance-app</loc>
+    <lastmod>2026-09-07</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://kaamsaathi.app/mazdoor-hajri-app</loc>
+    <lastmod>2026-09-07</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://kaamsaathi.app/construction-site-management</loc>
+    <lastmod>2026-09-07</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://kaamsaathi.app/kamet</loc>
+    <lastmod>2026-09-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://kaamsaathi.app/kamet/about</loc>
+    <lastmod>2026-09-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://kaamsaathi.app/kamet/services</loc>
+    <lastmod>2026-09-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://kaamsaathi.app/kamet/contact</loc>
+    <lastmod>2026-09-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://kaamsaathi.app/blog/kaamsaathi-app-features-daily-wage-worker-attendance</loc>
+    <lastmod>2025-07-10</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://kaamsaathi.app/blog/kaamsaathi-app-features-daily-wage-worker-attendance"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://kaamsaathi.app/blog/kaamsaathi-app-features-daily-wage-worker-attendance"/>
+  </url>
+  <url>
+    <loc>https://kaamsaathi.app/blog/mazdoor-hajri-app-kaise-istemal-karein</loc>
+    <lastmod>2025-08-02</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+    <xhtml:link rel="alternate" hreflang="hi" href="https://kaamsaathi.app/blog/mazdoor-hajri-app-kaise-istemal-karein"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://kaamsaathi.app/blog/mazdoor-hajri-app-kaise-istemal-karein"/>
+  </url>
+  <url>
+    <loc>https://kaamsaathi.app/blog/labour-management-tips-for-contractors</loc>
+    <lastmod>2025-08-20</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://kaamsaathi.app/blog/labour-management-tips-for-contractors"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://kaamsaathi.app/blog/labour-management-tips-for-contractors"/>
+  </url>
+  <url>
+    <loc>https://kaamsaathi.app/blog/construction-site-management-best-practices-india</loc>
+    <lastmod>2025-09-05</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://kaamsaathi.app/blog/construction-site-management-best-practices-india"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://kaamsaathi.app/blog/construction-site-management-best-practices-india"/>
+  </url>
+  <url>
+    <loc>https://kaamsaathi.app/blog/daily-wage-payment-calculation-guide</loc>
+    <lastmod>2025-09-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://kaamsaathi.app/blog/daily-wage-payment-calculation-guide"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://kaamsaathi.app/blog/daily-wage-payment-calculation-guide"/>
+  </url>
+  <url>
+    <loc>https://kaamsaathi.app/blog/construction-technology-trends-india-2025</loc>
+    <lastmod>2025-10-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://kaamsaathi.app/blog/construction-technology-trends-india-2025"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://kaamsaathi.app/blog/construction-technology-trends-india-2025"/>
+  </url>
+  <url>
+    <loc>https://kaamsaathi.app/blog/ghar-ki-foundation-work-kaise-kare</loc>
+    <lastmod>2026-06-04</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+    <xhtml:link rel="alternate" hreflang="hi" href="https://kaamsaathi.app/blog/ghar-ki-foundation-work-kaise-kare"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://kaamsaathi.app/blog/ghar-ki-foundation-work-kaise-kare"/>
+  </url>
+</urlset>

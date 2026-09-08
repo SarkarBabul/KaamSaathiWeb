@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Worker Attendance & Labour Management App for Contractors | KaamSaathi</title>
+    <meta name="description" content="KaamSaathi is India's easiest worker attendance & labour management app for contractors and builders. मजदूरों की हाजरी, पेमेंट और साइट मैनेजमेंट अब मोबाइल से। Free download." />
+    <meta name="author" content="Kamet" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="sitemap" type="application/xml" title="Sitemap" href="https://kaamsaathi.app/sitemap.xml" />
+    <script>
+      (function () {
+        var canonicalHost = "kaamsaathi.app";
+        var isCanonicalDomain = location.hostname === canonicalHost || location.hostname === "www." + canonicalHost;
+        var path = location.pathname === "/" ? "/" : location.pathname.replace(/\/+$/, "");
+        if (isCanonicalDomain && (location.protocol !== "https:" || location.hostname !== canonicalHost || location.pathname !== path)) {
+          location.replace("https://" + canonicalHost + path + location.search + location.hash);
+        }
+      })();
+    </script>
+
+    <meta property="og:title" content="Worker Attendance & Labour Management App for Contractors | KaamSaathi" />
+    <meta property="og:description" content="मजदूरों की हाजरी, पेमेंट और साइट मैनेजमेंट अब मोबाइल से करें। India's easiest labour attendance app for contractors and builders." />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="https://kaamsaathi.app/kaamsaathi-og.jpg" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://kaamsaathi.app/kaamsaathi-og.jpg" />
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
