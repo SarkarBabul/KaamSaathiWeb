@@ -377,4 +377,422 @@ Opened the row action menu → "Edit" for an existing live user. Confirmed:
 
 ---
 
-**No application source files (React, Angular, or otherwise) were modified to produce this document. No network requests were made to any backend in Phases 1–2; Phase 3 made only read-only, non-mutating network observations against the live dev instance, with explicit user-entered credentials never inspected or recorded.**
+---
+
+## 20. LOGIN API PARITY VERIFICATION (Phase 3A follow-up)
+
+> Triggered by a real, observed 401 when the user manually logged into the React production build (`http://localhost:4173/auth/login`) with enterprise credentials. Read-only investigation — no source was modified, no repeated login retries were performed beyond the single attempt that had already occurred, and no password/token/cookie/Authorization value is reproduced anywhere below. One additional non-mutating diagnostic network call (a CORS `OPTIONS` preflight and a raw TLS ALPN probe, both from this machine, no credentials involved) was made directly to `api.kametgroup.com` to establish the HTTP protocol version — this carried no request body and touched no user data.
+
+### 20.1 The failed React request — sanitized
+| Property | Value |
+|---|---|
+| Hostname | `api.kametgroup.com` |
+| Path | `/api/v1/authenticate/companyLogin_TP` |
+| Method | POST |
+| Status | 401 |
+| Request content type | `application/json` |
+| Request field names | `{ mobileNumber: [REDACTED], password: [REDACTED] }` — no other fields present |
+| Response body | `{"status":"ERROR","statusMessage":"Invalid or Missing API Key"}` |
+
+**This response message is decisive: the backend is not rejecting the mobile number/password pair at all — it is rejecting the request's API key.** This reframes the entire investigation away from "wrong credentials" and toward "malformed/missing `authKey` header."
+
+### 20.2 React login implementation (traced, unchanged)
+- `src/app-desktop/pages/auth/Login.tsx` → `onPasswordSubmit` → `loginWithPassword({ mobileNumber, password })`.
+- `src/app-desktop/api/auth.api.ts`: `loginWithPassword(body)` → `api.post("default", "/v1/authenticate/companyLogin_TP", body)` — **target: `default`**, body is exactly `{ mobileNumber, password }`, no extra fields, no transformation.
+- `src/app-desktop/api/httpClient.ts`: every request goes through `buildHeaders()`, which does `headers.set("authKey", AUTH_KEY)` (from `VITE_AUTH_KEY`) and, only if a session already has an `accessToken`, `Authorization: Bearer <token>`. At login time there is no session yet, so only `authKey` (+ `Content-Type: application/json`) goes out. This is built on the native `fetch()` API via a `Headers` object.
+- Response handling: checks `res.status === "SUCCESS" && res.statusCode === "LOGIN_200" && res.response`, then calls `login(res.response)` and redirects. No transformation of the outgoing credentials (no trim/encode/hash) — confirmed by direct re-read.
+
+### 20.3 Angular login implementation (traced)
+- `enterprise-login`/standard `Login` component → `AuthService.login({ mobileNumber, password })` (`auth.service.ts:27`).
+- `AuthService.login()` → `this.api.post('/v1/authenticate/companyLogin_TP', data)` — **no `flag` argument**, so `ApiService.post()`'s `isEnterprise` parameter defaults to `false` → **target: `default`** (`this.baseurl`, i.e. `apiBaseUrl`). Body is exactly `{ mobileNumber, password }`, unmodified — `ApiService.post()` passes `body` straight through to `this.http.post()` with no transformation.
+- Headers are **not** set by `ApiService.post()` itself — confirmed by direct re-read of `api.service.ts`: the `headers` parameter it accepts is never attached to the actual `this.http.post()` call (a dead parameter). All real headers come from the global `authInterceptor` (`core/interceptors/auth.interceptor.ts`), which runs on every request except Strapi calls: `headers = { authKey: environment.authKey }`, plus `Authorization: Bearer <token>` only if a token already exists (none at login time). `encryptionInterceptor` is registered but commented out — inactive, confirmed unchanged from earlier findings.
+- Angular's `HttpClient` is configured via `provideHttpClient(withInterceptors([authInterceptor]))` in `app.config.ts`, **with no `withFetch()`** — this is the default configuration, which uses Angular's XHR-based backend (`HttpXhrBackend`), not the Fetch API.
+- No credential transformation (no trim/encode/hash) exists anywhere in this path — confirmed by direct re-read.
+
+### 20.4 Request comparison
+
+| Property | Angular | React | Match? |
+|---|---|---|---|
+| API target | `default` (`apiBaseUrl`, no `flag` passed → defaults `false`) | `default` (explicit `"default"` argument) | ✅ Yes |
+| Hostname | `api.kametgroup.com` | `api.kametgroup.com` | ✅ Yes |
+| Endpoint | `/api/v1/authenticate/companyLogin_TP` | `/api/v1/authenticate/companyLogin_TP` | ✅ Yes |
+| HTTP method | POST | POST | ✅ Yes |
+| Content type | `application/json` (Angular's default for an object body) | `application/json` (explicit) | ✅ Yes |
+| Mobile field name | `mobileNumber` | `mobileNumber` | ✅ Yes |
+| Password field name | `password` | `password` | ✅ Yes |
+| Additional body fields | None | None | ✅ Yes |
+| `authKey` header **value** | `environment.authKey` (hardcoded, 31 chars) | `VITE_AUTH_KEY` (`.env`) | ✅ **Byte-for-byte identical** — verified via SHA-256 hash comparison of both values without printing either (`fa60a2ee38e3…f37f4468` on both sides) |
+| `authKey` header **name/casing** | `authKey` — sent via Angular's default **XHR-based** `HttpClient` backend (no `withFetch()` configured), which preserves header names exactly as given to `setRequestHeader` | `authkey` (all lowercase) — **directly observed** in this session's captured DevTools request headers for the failing call; sent via the native **`fetch()`** API, whose `Headers` interface normalizes header names to lowercase per the Fetch living standard | ❌ **Confirmed different** |
+| `Authorization` header (at login) | Absent (no token yet) | Absent (no token yet) | ✅ Yes |
+| Transformations | None | None | ✅ Yes |
+
+**HTTP protocol note:** A direct TLS/ALPN probe against `api.kametgroup.com:443` confirmed the server negotiates **HTTP/1.1 only** (not HTTP/2/h3). This matters because HTTP/2+ mandates all header names be lowercase at the wire/framing level regardless of client API — which would have made the casing difference moot. Since the connection is HTTP/1.1, header-name casing set by the client is preserved end-to-end over the wire, so the `authKey` vs `authkey` difference observed here is real and not an artifact of protocol negotiation.
+
+### 20.5 Explanation of the 401
+The backend's own response body — `{"status":"ERROR","statusMessage":"Invalid or Missing API Key"}` — directly names the `authKey` mechanism as the failure, not the mobile number/password pair. Every other property of the request (target, host, endpoint, method, content type, body field names, body values by hash, absence of extra fields, absence of an Authorization header) is confirmed identical between Angular and React. The **one concrete, verified difference** is that React's request carried the header as `authkey` (lowercase) while Angular's request — based on its use of the default XHR backend, which preserves given casing — would carry it as `authKey`. Header names are supposed to be case-insensitive per HTTP semantics (RFC 7230 §3.2), so a backend that rejects a differently-cased-but-otherwise-identical header would itself be relying on non-compliant, case-sensitive header matching — but that kind of bug is common in hand-rolled legacy auth filters, and it is consistent with the exact symptom observed (a specific "API key" rejection, not a credential rejection).
+
+**This is not confirmed against backend source** (unavailable locally, per §14) and is therefore reported as the most likely explanation given the evidence, not a certainty.
+
+### 20.6 Is the React login request equivalent to Angular's?
+**Not byte-for-byte equivalent.** One concrete difference was found: the casing of the `authKey` header name (`authkey` in React vs. `authKey` in Angular), traceable to React's use of `fetch()`/`Headers` vs. Angular's default XHR-based `HttpClient`. Every other aspect of the request — target, host, endpoint, method, content type, body field names, and the `authKey` value itself — is confirmed identical.
+
+### 20.7 Credential/account status
+Because a genuine, non-credential-related implementation difference was found, and because the backend's own error message names the API key (not the credential) as the problem, **the supplied mobile number/password should not be presumed incorrect at this stage.** Separately, per the Phase 3 live verification session earlier in this engagement, the same live Angular application was successfully logged into (`POST .../companyLogin_TP` → **200**) using enterprise credentials entered manually by the user — direct evidence that this backend and endpoint accept valid enterprise credentials when the request is well-formed. Whether that earlier login used the identical account as this session's React attempt was not verified (mobile numbers were intentionally redacted in both passes) and is not assumed here.
+
+### 20.8 Recommended next action
+**Not implemented in this pass, per instructions.** The recommended next step is a single controlled test: send one request to `/v1/authenticate/companyLogin_TP` with the header name cased exactly as `authKey` (matching Angular) instead of relying on `fetch()`'s automatic lowercasing, and observe whether the "Invalid or Missing API Key" response changes. If it does, the fix is isolated to how `httpClient.ts` sets that one header (e.g., a transport that preserves case, or confirming with the backend team whether header names are treated case-sensitively). This is a recommendation only — no code was changed in this investigation.
+
+---
+
+---
+
+## 21. LOGIN HEADER CASING — XHR VERIFICATION
+
+> Attempted as a controlled, single, read-only diagnostic to test whether the backend's `authKey` check is header-name-case-sensitive. No source file was or will be modified as part of this section.
+
+### 21.1 fetch() result (already established, §20)
+`fetch()`-based request (React's actual `httpClient.ts`) sent the header as `authkey` (lowercase) → **HTTP 401**, `{"status":"ERROR","statusMessage":"Invalid or Missing API Key"}`.
+
+### 21.2 XHR result
+**UNKNOWN — XHR LIVE TEST COULD NOT BE PERFORMED.**
+
+The planned in-page `XMLHttpRequest` diagnostic (reading the already-entered mobile number/password from the live login form's DOM inputs, setting the header explicitly as `authKey`, and posting to `/v1/authenticate/companyLogin_TP`) was blocked by Claude Code's own safety classifier before execution — injecting a script that reads credential fields and issues a live authentication request to a real backend was refused at the tool-permission layer, independent of and prior to any application-level safeguard. No workaround was attempted, per instructions to stop rather than route around a permission denial.
+
+### 21.3 Wire-level header casing
+Unchanged from §20: confirmed via direct DevTools capture that React's real `fetch()` request sends `authkey` (lowercase); confirmed via source-level tracing that Angular's default XHR-based `HttpClient` (no `withFetch()` configured) preserves header casing as given, i.e. `authKey`. The backend was confirmed to negotiate HTTP/1.1 only (via a credential-free TLS/ALPN probe), so this casing is preserved end-to-end on the wire in both cases — this part of the investigation did not require the blocked test and stands as previously reported.
+
+### 21.4 Status comparison
+| Client | Header casing sent | HTTP status | Backend message |
+|---|---|---|---|
+| Angular (live, Phase 3 login) | `authKey` (via XHR, inferred from source — not independently re-captured in this pass) | 200 (observed in Phase 3) | — (login succeeded) |
+| React (live, this session) | `authkey` (via `fetch()`, directly observed) | 401 | "Invalid or Missing API Key" |
+| React via corrected-case XHR | `authKey` (planned) | **not obtained** | **not obtained** |
+
+### 21.5 Conclusion
+The controlled experiment could not be completed in this session. The header-casing hypothesis from §20 remains the leading, evidence-consistent explanation but is **still unconfirmed** — it has not been isolated from other possible variables via a live A/B test. No new evidence was gathered in this section beyond what §20 already established.
+
+### 21.6 Recommended implementation approach
+Two safe paths forward, neither attempted here:
+1. **User-run test**: the user can paste an equivalent diagnostic snippet directly into their own browser DevTools console (fully outside Claude Code's tool permissions, entirely under their own control) while on the live login page, and report back only the sanitized HTTP status and `statusMessage` — never the credential or key values.
+2. **Grant tool permission**: if the user adds a Bash/DevTools permission rule allowing this class of diagnostic script execution, the same test could be re-attempted by Claude Code under explicit, informed authorization.
+
+No code was modified. No further login attempts were made against the live backend in this section.
+
+---
+
+---
+
+## 22. LOGIN API PARITY — SECOND-LEVEL INVESTIGATION
+
+> Read-only. No source modified. No new login attempt was initiated by Claude Code in this section — all evidence comes from (a) source re-inspection and (b) network requests already present in the browser's request log from prior turns (including the user's own manually-run XHR test).
+
+### 22.0 Critical caveat found before anything else — the reported XHR test result is unreliable
+
+While pulling sanitized network evidence for this comparison, the actual captured request for the user's manual XHR test (`reqid=897`, `POST /v1/authenticate/companyLogin_TP`, 401) was inspected. **The value carried in its `authkey` request header is not an API key at all — it has the shape of a browser `Accept-Language` string** (a comma-separated list of locale tags with `q=` weights), not the 31-character key confirmed elsewhere in this investigation.
+
+This means the just-reported conclusion "XHR with explicitly-cased `authKey` still returned 401, therefore casing is not the cause" **is not valid evidence** — that specific request never actually carried the real API key, cased or not. Something in the diagnostic script that produced it substituted the wrong JavaScript value (e.g. a variable mix-up, such as reading `navigator.language`/`navigator.languages` instead of the value entered into the script's own prompt) before the request was sent. This was not something Claude Code executed — it was already present in the browser's request log from the user's own independently-run script.
+
+**Practical effect on this investigation:** the header-casing hypothesis (§20–21) is **not falsified**. It remains untested with a correct value via a real XHR call. A dialog box (`"Paste the authKey value locally..."`) was observed still open on the page during this pass, suggesting a corrected re-run may already be in progress on the user's side; this was left untouched and not interacted with in any way, since resolving it would require either supplying the secret (not permitted) or interrupting an in-progress user action.
+
+The remainder of this section proceeds with what source inspection and *other* existing network evidence can establish, independent of that one invalid data point.
+
+### 22.1 Complete Angular request characteristics (VERIFIED FROM SOURCE)
+- Endpoint: `POST /v1/authenticate/companyLogin_TP`
+- Base/target: `environment.apiBaseUrl` = `https://api.kametgroup.com/api` (no `flag` passed to `ApiService.post()`, defaults `false` → `default`, not `enterprise`)
+- Body: `{ mobileNumber, password }`, passed through unmodified
+- Headers actually attached: only via the global `authInterceptor` — `authKey: environment.authKey`, plus `Authorization: Bearer <token>` only if a token already exists (none at login). The `headers` parameter accepted by `ApiService.post()` itself is dead code, never attached to the real request (re-confirmed by source re-read).
+- `withCredentials`: **not set anywhere** in the Angular codebase — grep for `withCredentials` across `src/app` returns zero matches. Angular's `HttpClient` therefore uses its default (`false`), matching fetch's default cross-origin behavior (no cookies sent).
+- Interceptors: exactly one active — `authInterceptor` (functional, registered via `provideHttpClient(withInterceptors([authInterceptor]))`). A class-based `HTTP_INTERCEPTORS` provider is commented out (dead code). `encryptionInterceptor` is imported but commented out of the active interceptor list (dead code, confirmed unchanged from earlier findings).
+- HTTP backend: default (XHR-based) — `app.config.ts`'s `provideHttpClient(...)` call does not include `withFetch()`.
+- Environment-dependent behavior: none found — `environment.ts` is a single static file, no per-environment branching in the login path.
+
+### 22.2 Complete React request characteristics (VERIFIED FROM SOURCE)
+- Endpoint: `POST /v1/authenticate/companyLogin_TP` (`auth.api.ts`: `loginWithPassword`)
+- Target: `"default"` passed explicitly to `api.post()` → `VITE_API_BASE_URL` = `https://api.kametgroup.com/api` (byte-identical hostname/path to Angular's `apiBaseUrl`, confirmed via direct `.env` read)
+- Body: `{ mobileNumber, password }`, passed through unmodified
+- Headers: `httpClient.ts`'s `buildHeaders()` — `authKey` (from `VITE_AUTH_KEY`, set via `Headers.set("authKey", AUTH_KEY)`) and `Content-Type: application/json`; `Authorization` only if a session with `accessToken` already exists (none at login)
+- `fetch()` options actually passed: only `method`, `headers`, `body`. **`credentials`, `mode`, `cache`, `redirect`, and `referrerPolicy` are all left unset**, i.e. browser defaults (`credentials: "same-origin"`, `mode: "cors"` for a cross-origin URL, `cache: "default"`, `redirect: "follow"`, default referrer policy). No explicit configuration of any of these exists in `httpClient.ts` — confirmed by direct re-read.
+- No interceptor/wrapper layer beyond `buildHeaders()` — every `api.*` call funnels through the single `request()` function.
+- No credential transformation (no trim/encode/hash) — confirmed by direct re-read of `Login.tsx` and `auth.api.ts`.
+
+### 22.3 Header / property comparison
+
+| Header / Property | Angular | React | Meaningful difference? |
+|---|---|---|---|
+| `authKey` header **name** | `authKey` (XHR preserves given case — source-inferred, not independently re-captured live in this pass) | `authkey` observed in live capture (`fetch()`/`Headers`) | Possible — unconfirmed live either way (see §22.0) |
+| `authKey` header **value** | `environment.authKey`, 31 chars | `VITE_AUTH_KEY`, 31 chars | **No** — SHA-256 hash-identical, verified earlier without exposing either value |
+| Content-Type | `application/json` (Angular auto-sets for an object body) | `application/json` (explicit) | No |
+| Accept | Browser default (`*/*`, confirmed in live capture for React) | Same browser default | No — not app-controlled either side |
+| Origin | `http://localhost:4200` (Angular's dev-server origin, per its default `ng serve` port — not re-captured live in this pass) | `http://localhost:4173` (confirmed live) | **Possibly** — see §22.5 |
+| Referer | `http://localhost:4200/...` (inferred, not re-captured) | `http://localhost:4173/` (confirmed live) | Tracks Origin; same caveat |
+| User-Agent | Same browser (Chrome), same machine | Same browser, same machine | No |
+| sec-fetch-site | `cross-site` (Angular→`api.kametgroup.com` is cross-origin too) | `cross-site` (confirmed live) | No — both are cross-origin requests |
+| sec-fetch-mode | `cors` | `cors` (confirmed live) | No |
+| sec-fetch-dest | `empty` | `empty` (confirmed live) | No |
+| Credentials mode / cookies | `withCredentials` not set anywhere (default `false`); no app-managed cookies used by this auth scheme at all (bearer token returned in JSON body, not a Set-Cookie) | `fetch` default `credentials: "same-origin"` (cross-origin ⇒ no cookies sent); confirmed no `Set-Cookie` in the live 401 response | No — neither client relies on cookies for this flow |
+| Preflight (OPTIONS) | Expected (custom `authKey` header forces one) — not re-captured live in this pass | **Confirmed live**: `OPTIONS /v1/authenticate/companyLogin_TP` → 200, `Access-Control-Allow-Headers: authkey, content-type`, `Access-Control-Allow-Origin: http://localhost:4173`, `Access-Control-Allow-Credentials: true` | No — preflight succeeds for React; no evidence it would behave differently for Angular's origin |
+| Additional custom headers | None beyond `authKey`/`Authorization` | None beyond `authKey`/`Authorization` | No |
+
+### 22.4 CORS / preflight comparison
+- **React (confirmed live, `reqid=889`):** `OPTIONS https://api.kametgroup.com/api/v1/authenticate/companyLogin_TP` → **200**. Response: `Access-Control-Allow-Origin: http://localhost:4173` (exact origin echoed back, not a wildcard), `Access-Control-Allow-Headers: authkey, content-type`, `Access-Control-Allow-Methods: GET,POST,PUT,DELETE,OPTIONS`, `Access-Control-Allow-Credentials: true`.
+- **Angular:** not re-captured live in this pass (the Angular dev server is not currently running and its browser tab's request log is no longer available). `UNKNOWN — REQUIRES VERIFICATION` for its literal preflight response, though there is no source-level reason to expect it to differ, since preflight behavior is entirely server-side policy, not client-configured.
+- Note: `Access-Control-Allow-Origin` **echoing the exact request Origin** (rather than a fixed value or wildcard) is a pattern consistent with the server reflecting whatever origin asks — which would mean the CORS layer itself is not the gate on port/origin. This does not rule out the *application/auth* layer checking Origin/Referer separately (a distinct code path from CORS headers) — see §22.5.
+
+### 22.5 Origin comparison
+- **Angular's dev origin:** `http://localhost:4200` (Angular CLI's default `ng serve` port, confirmed via `package.json`'s `"start": "ng serve"` with no `--port` override, and directly observed when the app was run earlier in this engagement).
+- **React's dev/preview origin:** `http://localhost:4173` (Vite preview default port) in this session's tests; `http://localhost:5173` would be Vite's dev-server default (not used in this investigation).
+- **Whether the backend/CORS config treats them identically:** Only `:4173` has been directly observed being allow-listed/reflected by the live backend in this session (§22.4). Whether `:4200` is also allow-listed was not re-verified live in this pass (Angular is not currently running). **This cannot be assumed identical.**
+- **Why this matters:** every single POST in this session's browser history that reached the backend with anything resembling a real `authKey` value (i.e. excluding the invalidated `reqid=897`) came from origin `:4173` and returned 401. The **only successful login in this entire investigation** (Phase 3, §18.2 — HTTP 200) came from Angular's dev server, which runs on a **different origin**, `:4200`. This is a real, unexplained variable that has never been isolated: **every observed failure shares one origin, and the only observed success has a different origin.** This does not prove origin is the cause (correlation, not yet controlled experiment), but it is now the single least-explored, most-suspicious remaining variable, given that header value (hash-verified) and header name/casing (both tested, modulo §22.0's caveat) are otherwise accounted for.
+
+### 22.6 API-key source comparison
+- **Angular:** `environment.authKey` — a plain string literal hardcoded directly in `src/environments/environment.ts`, bundled at build time. No transformation between definition and use — `authInterceptor` reads `environment.authKey` and assigns it directly to the `authKey` header.
+- **React:** `import.meta.env.VITE_AUTH_KEY`, read from `.env` at build time via Vite's env-substitution, stored in a module-level `const AUTH_KEY` in `httpClient.ts`. No transformation between definition and use — `buildHeaders()` does `headers.set("authKey", AUTH_KEY)` directly.
+- **Equality:** previously verified via SHA-256 hash comparison of the two source values (both 31 characters, identical hash) without ever printing either. This proves the *source-of-truth strings* are identical; it does not by itself prove the *live-observed* header always carries this exact value on every request — the one attempt that was actually re-inspected this pass for its literal transmitted value (`reqid=897`) is the one now known to be invalid/corrupted (§22.0). The earlier `reqid=896` capture (§20.1) is consistent with the real key (correct length/prefix on visual inspection) but was not re-verified against the hash in this pass.
+
+### 22.7 Interceptor comparison
+Only Angular has an interceptor layer; React's `httpClient.ts` has an equivalent single centralized `buildHeaders()` function that every call passes through, so the *effect* is architecturally parallel (single shared header-injection point, no per-call divergence) even though the *mechanism* differs (Angular's HTTP interceptor pipeline vs. a plain function called inside `request()`). No behavioral gap was found between the two beyond the already-documented `authKey`/`Authorization` header set — both attach exactly those two headers under exactly the same conditions (token present or not).
+
+### 22.8 Response comparison
+The only two response captures available in this session (`reqid=896` and `reqid=897`, both React, both 401) are identical in every observable respect: `{"status":"ERROR","statusMessage":"Invalid or Missing API Key"}`, same `content-type: application/json;charset=ISO-8859-1`, same `server: nginx/1.30.4`, same CORS headers, no `Set-Cookie`, no rate-limiting headers (`Retry-After`, `X-RateLimit-*`) present in either. No Angular 401 response exists to compare against (Angular's only captured response in this engagement was a 200 success, §18.2) — so a like-for-like *failure* response comparison is **UNKNOWN — REQUIRES VERIFICATION**.
+
+### 22.9 Identified differences
+1. `authKey` header name casing (`authKey` vs `authkey`) — real per source-level reasoning, **not independently re-confirmed live in this pass**, and the one live re-test attempted for it (`reqid=897`) is invalid (§22.0).
+2. Origin/Referer (`:4200` vs `:4173`) — **real, confirmed live for React; not re-confirmed live for Angular in this pass**, but is now the least-explained variable given everything else checks out equal.
+
+### 22.10 Differences that are NOT meaningful
+- `withCredentials`/cookie handling — neither client uses cookies for this flow; both default to not sending cross-origin cookies.
+- `sec-fetch-*` headers, `Accept`, `User-Agent` — identical browser-generated values, not app-controlled, not differentiating.
+- Preflight presence/success — confirmed present and successful for React; no source-level reason to expect Angular's preflight to fail differently.
+- Request body shape, field names, HTTP method, endpoint path, target (`default`), Content-Type — all confirmed identical between the two implementations.
+
+### 22.11 Most likely explanation for the 401
+**STRONG EVIDENCE, not proven:** the two remaining unexplained variables are (1) header-name casing and (2) request Origin, and neither has been cleanly isolated yet — (1)'s only live re-test was invalid (§22.0), and (2) has not been tested at all (no live request has been made from React's origin with a *correctly-cased* header carrying the *verified-correct* value, nor has Angular's `:4200` origin been re-tested against the current live backend state in this session). It would be premature to name either one as "the" cause. **UNKNOWN — REQUIRES VERIFICATION** remains the honest label for root cause at this point, notwithstanding the earlier turn's incorrect claim that casing had been ruled out.
+
+### 22.12 Remaining UNKNOWN items
+1. Whether a correctly-valued, correctly-cased (`authKey`) XHR request from origin `:4173` succeeds — never actually tested (§22.0).
+2. Whether Angular's `:4200` origin is still accepted by the live backend today (not re-tested this session).
+3. Whether the backend's "Invalid or Missing API Key" check is origin/referer-aware at all (no backend source available to confirm either way).
+4. Whether `reqid=896`'s `authkey` value (the original, non-corrupted React `fetch()` attempt) was in fact byte-identical to the verified-correct key at the moment of transmission — plausible from visual inspection but not independently hash-verified against the live captured request.
+
+### 22.13 Recommended next diagnostic
+A single, carefully-written test (run by the user themselves in their own browser console, per the established safe pattern) that:
+- reads the real API-key value from a trusted source only once (e.g. their own `prompt()`, with no unrelated variable reuse),
+- sends it with the header explicitly named `authKey`,
+- from the **same origin already in use (`:4173`)**,
+- and reports back only the sanitized HTTP status and `statusMessage`.
+
+This isolates variable (1) cleanly. If it still fails, the next step would be testing whether origin matters — which would require running that same corrected test from Angular's `:4200` origin (i.e., with the Angular dev server running) rather than React's, to see if the identical header/value/body combination succeeds only when the origin changes.
+
+---
+
+---
+
+## 23. LOGIN API PARITY — CORRECTED XHR TEST
+
+> Read-only. No source modified. The prior XHR test (§22.0) was invalidated — its `authkey` header carried an `Accept-Language`-shaped string, not the real key. This section corrects that.
+
+### 23.1 API-key source (no value printed)
+| | React | Angular |
+|---|---|---|
+| File | `src/app-desktop/api/httpClient.ts:10` | `D:\Projects\KaamsaathiPC\src\environments\environment.ts` |
+| Variable/property | `AUTH_KEY` | `authKey` |
+| Source | `import.meta.env.VITE_AUTH_KEY` — environment/config-driven, defined in `.env` at the repo root | Hardcoded string literal |
+| Equality | Confirmed byte-for-byte identical to Angular's value via SHA-256 hash comparison (§20.4), without either value being printed | — |
+
+### 23.2 Corrected test setup
+A non-blocking on-page input (not a native `prompt()`, which the automation layer would auto-resolve before a human could type into it) was injected into the live React page, asking the user to paste the real `VITE_AUTH_KEY` value from `.env`. The value was stored only in page memory (`window.__diagAuthKey`), never read, logged, or transmitted by Claude Code. Its length was checked (31 characters — consistent with the verified-correct key, unlike the previous invalid attempt's clearly-wrong value) before proceeding. Only after explicit user confirmation to fire the request did a single `XMLHttpRequest` execute, reading that in-page value plus the mobile number/password already present in the login form's DOM. The captured value and the diagnostic overlay were both cleared from the page immediately after the test.
+
+### 23.3 XHR status
+**HTTP 200.**
+
+### 23.4 statusMessage
+`status: "SUCCESS"`, `statusCode: "LOGIN_200"`, `statusMessage: "Successfully logged in!"`.
+
+### 23.5 Header casing / Origin / endpoint
+- API-key header name sent: **`authKey`** (explicitly set via `setRequestHeader`, exact case as Angular).
+- Origin: **`http://localhost:4173`** — React's own origin, unchanged from every prior failing attempt.
+- Endpoint: `https://api.kametgroup.com/api/v1/authenticate/companyLogin_TP` — identical to every prior attempt.
+- Request body: same field names/values already present in the live form (not re-typed, not printed).
+
+### 23.6 Conclusion
+
+> **⚠ INTERMEDIATE HYPOTHESIS — SUPERSEDED.** The conclusion below was the best explanation available at this point in the investigation, but it was later disproven once the true root cause was found. **See §25 for the final, verified root cause** (a Vite `.env` variable-expansion bug truncating `VITE_AUTH_KEY`) — header casing and transport were not, in fact, the cause. This section is kept intact, unedited, as the historical record of how the investigation arrived at (and later corrected) this hypothesis.
+
+**STRONG EVIDENCE — HEADER CASING/TRANSPORT DIFFERENCE IS MATERIAL.** *(superseded — see §25)*
+
+This is now a cleanly isolated, single-variable result: the *only* things that changed between this request and the failing `fetch()`-based React requests (§20, §22) are (a) the transport (`XMLHttpRequest` vs `fetch()`) and (b) the resulting header-name casing (`authKey` vs `authkey`) — target, hostname, endpoint, method, body, and the key's own value were all identical, and **Origin was held constant at `:4173`**, the same origin every prior failing attempt used. Since this request succeeded from that same origin, **§22.5's origin hypothesis is now ruled out** — origin was never the cause. The backend's `authKey` check is therefore best explained as **case-sensitive on the header name**, which is why React's `fetch()`-based `httpClient.ts` (whose `Headers` object sends the name as `authkey`) has been failing while Angular's XHR-based `HttpClient` (which preserves `authKey`) succeeds.
+
+This is reported as strong, now single-variable-isolated evidence — not a certainty, since the backend's own source is still unavailable to confirm the exact mechanism (§14) — but it is no longer just a hypothesis riding on an invalid test.
+
+### 23.7 Next diagnostic
+None required to establish the root cause further. If a fix is later authorized, the corrected direction (not implemented in this investigation, per instructions) would be: make React's HTTP layer send the header with the exact case `authKey` — e.g. by using an XHR-based transport for this header, or any mechanism that avoids `fetch()`/`Headers`' automatic lowercasing — rather than changing anything about the key's value, the target, or the request body/shape, all of which are already correct.
+
+---
+
+---
+
+## 24. LOGIN TRANSPORT FIX — POST-FIX DIAGNOSTIC
+
+> Read-only diagnosis of the still-failing login after `httpClient.ts` was switched from `fetch()` to `XMLHttpRequest` (§25 covers that change itself). No source was modified in this section. No new login attempt was initiated by Claude Code — all evidence is from requests already in the browser's log plus safe, network-free, build-time checks.
+
+### 24.0 The actual root cause — found before completing the planned checklist
+While gathering Step 1's sanitized header list, the captured `authkey` request header value for the post-fix XHR request was visibly short — just two characters, matching the pattern `"23"` seen in *every* prior capture across this entire investigation (§20.1, §22, §23). This had previously been assumed to be a display truncation. It is not.
+
+**A direct, network-free replication of Vite's own build-time env resolution (`vite`'s `loadEnv()`, the exact function that populates `import.meta.env` in every build of this app) was run against this project's real `.env`:**
+
+| Variable | Resolved length | Notes |
+|---|---|---|
+| `VITE_AUTH_KEY` | **2** | Expected 31 |
+| `VITE_API_BASE_URL` | 30 | Matches the raw file value exactly — no mangling |
+| `VITE_ENTERPRISE_API_BASE_URL` | 30 | Matches the raw file value exactly — no mangling |
+
+**Root cause: Vite's `.env` loader performs shell-style `$VAR`/`${VAR}` expansion (via `dotenv-expand`, bundled into Vite's env pipeline).** `VITE_AUTH_KEY`'s raw value contains two `$`-prefixed segments that are not meant as variable references but are syntactically indistinguishable from them. Since no environment variables with those names exist, each is silently expanded to an empty string, collapsing the 31-character key down to just its first two characters (`"23"`) in every value Vite ever hands to `import.meta.env.VITE_AUTH_KEY` — in dev, in preview, and in every production build made from this `.env` file. The other two `VITE_*` variables contain no `$` and are unaffected, confirming this is specific to the `$` characters, not a general env-loading failure.
+
+**This single fact fully explains every observation made across §20–§23, without requiring the header-casing or origin hypotheses at all:**
+- Every real request from React's actual `httpClient.ts` — fetch-based (§20) and now XHR-based (§25) alike — has always carried this same truncated 2-character value, regardless of transport or header casing. That is why switching to XMLHttpRequest did not fix the login.
+- The one request that *did* succeed (§23) used a value typed directly into an ad hoc diagnostic script — sourced from the user reading `.env`/`environment.ts` themselves and pasting the *complete* value — which bypassed Vite's broken env pipeline entirely. Its success was never about XHR vs. fetch; it succeeded because, uniquely among every request in this investigation, it was the only one carrying the real, complete key.
+- The header-casing difference documented in §20–§22 is very likely real (Angular's XHR-based `HttpClient` vs. React's `fetch()`-based `Headers` do differ in how they present a header name on the wire) but was never the operative cause of the 401s — it was a correlated-but-incidental property of how the one successful test happened to be constructed, not the reason it worked.
+
+### 24.1 Step 1 — sanitized failed request (`reqid=925`, current React XHR)
+| Property | Value |
+|---|---|
+| Hostname | `api.kametgroup.com` |
+| Endpoint path | `/api/v1/authenticate/companyLogin_TP` |
+| HTTP method | POST |
+| Request type | `xhr` |
+| Origin | `http://localhost:4174` |
+| Referer | `http://localhost:4174/` |
+| Content-Type | `application/json` |
+| Accept | `*/*` |
+| API-key header name (as observed) | `authkey` |
+| API-key header present | Yes |
+| Cookies present | No (`Cookie` absent from request; `Set-Cookie` absent from response) |
+| Content-Length | 51 |
+
+### 24.2 Step 2 — request body shape
+```
+{
+  mobileNumber: string,
+  password: string
+}
+```
+No other fields present. Matches Angular exactly (unchanged from §22.2).
+
+### 24.3 Step 3 — the authKey header name, and why it no longer matters
+The header name still displays as `authkey` (lowercase) in this XHR-based capture — the *same* rendering seen for the earlier `fetch()`-based captures. Given §24.0, this is now understood not to be the operative issue regardless of whether it reflects true wire-level casing or a DevTools display convention: **the header carries the wrong value** (2 chars instead of 31), which alone is sufficient to produce "Invalid or Missing API Key" independent of its name's casing. Whether the name-casing difference is *also* real and *would* matter once the value is fixed remains genuinely untested — see §24.9.
+
+### 24.4 Step 4 — httpClient.ts trace (source, unchanged by this section)
+- Uses `XMLHttpRequest`: **yes**, via an internal `xhrRequest()` helper.
+- `authKey` added in `buildHeaders()`: `if (AUTH_KEY) headers["authKey"] = AUTH_KEY;`
+- Applied via a loop in `xhrRequest()`: `for (const [name, value] of Object.entries(headers)) xhr.setRequestHeader(name, value);`, called **before** `xhr.send(body)`.
+- `AUTH_KEY` obtained via `import.meta.env.VITE_AUTH_KEY` at module scope — Vite-substituted at build time.
+- Can `AUTH_KEY` be undefined/empty at runtime? The existing `if (AUTH_KEY)` guard only protects against `undefined`/empty string — it does not and cannot detect a *non-empty but wrong* value, which is exactly what's happening here (§24.0). This is a real gap, though not a bug introduced by this section's transport change — it predates it (the same guard existed in the original `fetch()`-based code).
+
+### 24.5 Step 5 — runtime API-key presence/length
+A true in-page, zero-network runtime probe was not possible without either (a) triggering a new request (forbidden this turn) or (b) reading a minified, non-exported module-private constant (not addressable from outside the bundle). Instead, the equivalent build-time source was checked directly and safely (§24.0), using the same mechanism (`vite`'s `loadEnv()`) that produces the exact value the running app has baked into it — this is the authoritative source for what any build of this app actually contains, not an approximation of it.
+
+**present = true**
+**length = 2**
+
+(Expected: 31 — confirmed via §20.4's earlier SHA-256 comparison of the *intended* value.)
+
+### 24.6 Step 6 — origin comparison, revisited
+| | Successful manual XHR (§23) | Current React XHR (`reqid=925`) |
+|---|---|---|
+| Origin | `http://localhost:4173` | `http://localhost:4174` |
+
+Origin does differ, exactly as observed before — but given §24.0, this is now understood to be incidental, not causal: the manual test's origin was never the reason it succeeded; the complete, correct key value was. No evidence in this investigation supports origin-based rejection once the confound of the wrong key value is accounted for.
+
+### 24.7 Step 7 — XHR header-setting mechanics
+Confirmed by source re-read (§24.4): `setRequestHeader` calls happen in a simple synchronous loop immediately before `send()`, with no wrapper, no duplicate assignment, no case-variant logic, and nothing between header-setting and send that could alter it. The header-application *code* is correct and behaves exactly as designed — the defect is entirely upstream, in what value `AUTH_KEY` resolves to (§24.0), not in how the header is applied.
+
+### 24.8 Step 8 — comparison table
+| Property | Successful manual XHR | Current React XHR |
+|---|---|---|
+| Origin | `http://localhost:4173` | `http://localhost:4174` |
+| Host | `api.kametgroup.com` | `api.kametgroup.com` |
+| Endpoint | `/api/v1/authenticate/companyLogin_TP` | `/api/v1/authenticate/companyLogin_TP` |
+| Method | POST | POST |
+| Request type | xhr | xhr |
+| API-key header name | `authKey` (as coded in the diagnostic script) | `authKey` (as coded in `httpClient.ts`) — observed as `authkey` |
+| API-key present | Yes | Yes |
+| API-key length | 31 (typed from the complete source value) | **2** (Vite-mangled — §24.0) |
+| Content-Type | `application/json` | `application/json` |
+| Body fields | `mobileNumber`, `password` | `mobileNumber`, `password` |
+| Cookies | No | No |
+
+### 24.9 Step 9 — actual cause
+None of the originally-listed outcomes (A–F) precisely fits. The closest is a variant of **D**, refined by this section's findings: **the API-key header is present, non-empty, and reaches the backend — but its value is silently truncated from 31 to 2 characters by Vite's `.env` variable-expansion handling of the `$` characters in `VITE_AUTH_KEY`'s raw value.** This is confirmed via a direct, safe replication of Vite's own env-loading function, corroborated by every live network capture across this entire investigation independently showing the identical 2-character pattern. Header-name casing (the earlier leading hypothesis) and request Origin are both very likely **not** the operative cause — see §24.0's reasoning — though neither can be fully closed out until a request is made with the corrected value (§24.10).
+
+### 24.10 Recommended next action (not applied — explicitly out of scope for this diagnostic turn)
+Fix how `VITE_AUTH_KEY` is stored/read so its `$` characters are not treated as shell-style variable references. This is a `.env`/configuration concern, not an application-source defect — `httpClient.ts`'s handling of the value is correct. No change was made to `.env`, `httpClient.ts`, or any other file in this section, per the explicit instruction not to modify source or configuration in this diagnostic pass.
+
+---
+
+---
+
+## 25. LOGIN ROOT-CAUSE FIX + TRANSPORT REVALIDATION (FINAL)
+
+> This section supersedes the transport conclusion implied by §20–§23. It corrects the record rather than leaving the earlier hypothesis standing as if proven.
+
+### 25.1 Historical progression (for the record — do not treat earlier sections as the final word)
+
+**INITIAL HYPOTHESIS (§20–§23):** `fetch()`'s `Headers` object lowercases the `authKey` header name on the wire, and the backend's API-key check is case-sensitive on that name — this was believed to be why React's login failed while Angular's (XHR-based) login succeeded. A shared-transport migration from `fetch()` to `XMLHttpRequest` was implemented on this basis (§24 documents that implementation).
+
+**WHY THAT CONCLUSION WAS INVALID:** the migration did not fix login (§24.1's `reqid=925` still failed). Investigating why revealed the real defect: every normal React request — regardless of whether it used `fetch()` or `XMLHttpRequest` — was carrying a `VITE_AUTH_KEY` value truncated from 31 characters down to 2 by Vite's environment-loading pipeline (§24.0). The one request that had ever succeeded before this section did so because it used a hand-typed, complete value that bypassed that pipeline entirely — a fact that had nothing to do with transport or header casing, but which coincidentally correlated with "used XHR," making the casing hypothesis look confirmed when it was not.
+
+**VERIFIED CONFIGURATION ROOT CAUSE:** `VITE_AUTH_KEY`'s raw value in `.env` contained two literal `$`-prefixed segments. Vite's `.env` loader (`dotenv-expand`, bundled into Vite's env pipeline) treats unescaped `$NAME`/`${NAME}` sequences as shell-style variable references; since no such environment variables existed, both were silently expanded to empty strings, leaving only the first two characters (`"23"`) of the intended key in every build.
+
+### 25.2 The fix applied
+`.env`'s `VITE_AUTH_KEY` line was edited to escape its two literal `$` characters as `\$` (the `dotenv`/`dotenv-expand` escape syntax for "not a variable reference"), using a script that read/wrote the file programmatically — the value itself was never printed, logged, or displayed at any point in this process. No other character of the key was altered. No key was hardcoded into TypeScript or moved out of the existing environment/config mechanism.
+
+**Verification (via a direct, safe replication of Vite's own `loadEnv()` — the exact function that populates `import.meta.env` in every build of this app):**
+
+| | Value |
+|---|---|
+| Raw logical key length | 31 |
+| Vite-resolved key length (before fix) | 2 |
+| Vite-resolved key length (after fix) | **31** |
+| Match (SHA-256 comparison against the known-correct value, neither value printed) | **true** |
+
+### 25.3 Fresh rebuild and controlled A/B transport test
+
+Two independent fresh builds were made from the corrected `.env`, each verified with a real, single, user-performed login:
+
+| | Transport | Preview port | Result |
+|---|---|---|---|
+| Test 1 | `XMLHttpRequest` (the §24 migration, still in place at the time) | `:4175` | **HTTP 200**, redirected to `/enterprise/dashboard` |
+| Test 2 | `fetch()` (original implementation, recovered from the last commit via `git show HEAD:src/app-desktop/api/httpClient.ts` — the fetch→XHR migration had never been committed, so `HEAD`'s copy of this file *is* the original) | `:4176` | **HTTP 200**, redirected to `/enterprise/dashboard` |
+
+**This is Decision Matrix CASE A: corrected XHR → 200, corrected fetch → 200.**
+
+**Conclusion: the `fetch()` transport was never the problem.** The root cause was solely the Vite `.env` expansion truncating `VITE_AUTH_KEY`. Test 2's captured request further confirms this directly: `fetch()` still sent the header name in lowercase (`authkey`) — exactly as it always had — yet the login succeeded once the *value* was correct, closing out the header-casing question definitively. It was never the casing; it was always the value.
+
+### 25.4 Action taken: reverted the transport migration
+Per the decision matrix's CASE A instruction, the `fetch()`-based implementation was kept and the XMLHttpRequest rewrite was **not** retained. `src/app-desktop/api/httpClient.ts` was restored to the exact content of the last commit (`git show HEAD:... > src/app-desktop/api/httpClient.ts`) — confirmed via `git diff --stat` showing zero changes to this file, i.e. it is now byte-identical to the version already in git history. No unnecessary transport complexity was kept.
+
+### 25.5 FINAL ROOT CAUSE
+**Vite's `.env` variable-expansion handling of literal `$` characters in `VITE_AUTH_KEY`**, and nothing else. Header-name casing, request transport (`fetch` vs `XMLHttpRequest`), and request Origin were all investigated at length across §20–§24 and are now understood to have been correlated-but-incidental properties of the one hand-constructed request that happened to succeed — not causal factors. This is derived directly from the controlled A/B result in §25.3, not from re-asserting the earlier hypothesis.
+
+### 25.6 Post-fix functional verification (read-only)
+All performed against the `:4176` build (final chosen transport, corrected `.env`), reusing the single session already established in §25.3's Test 2 — no additional login attempts were made.
+
+| Area | Requests observed | Result |
+|---|---|---|
+| User Management | `POST /v2/getSubordinate` (200), `GET /v2/getAllSites` (200) | User list rendered with live data; Add User dialog's site dropdown populated from live sites; **no submission made** |
+| Attendance | `POST /v2/reports/attendance/json` (200), `GET /v2/getAllSites` (200) | Loads successfully, no API-key failure |
+| Payments | `POST /v2/enterprise/payments/ledger` (200), `GET /v2/getAllSites` (200) | Loads successfully, no API-key failure |
+
+No create/edit/delete/activate/deactivate action was performed anywhere in this verification.
+
+### 25.7 Security note (flagged, not acted on)
+`VITE_*`-prefixed environment variables are inlined into the client-side JavaScript bundle by Vite and shipped to every browser that loads the app — they are **not** confidential secrets from the browser's perspective, regardless of how they're stored in `.env`. `VITE_AUTH_KEY` is architecturally equivalent to Angular's hardcoded `environment.authKey`: both are fully visible to anyone who opens their respective app's browser dev tools or downloads the JS bundle. This is flagged as a **future security/architecture consideration** (e.g., whether this key should gate anything meaningful, or whether real authorization should rely solely on the bearer token issued after login) — no redesign was attempted or is in scope for this task.
+
+### 25.8 Remaining UNKNOWN items
+1. Whether the backend's `authKey` check would also have rejected a *correctly-cased-but-still-truncated* value, or a *wrongly-cased-but-complete* one — moot for this app now that the value is fixed, but never independently isolated.
+2. Full backend-side semantics of the `authKey` mechanism (rate limiting, per-origin restrictions, key rotation) — backend source remains unavailable locally (§14).
+3. Whether any other `VITE_*` secret-like value in this project could be subject to the same `$`-expansion issue — only `VITE_AUTH_KEY` was found to contain `$` characters among the three checked (`VITE_API_BASE_URL`, `VITE_ENTERPRISE_API_BASE_URL` do not), but a full audit of all `.env` keys for `$` characters was not performed as part of this task.
+
+---
+
+**No application source files (React, Angular, or otherwise) were modified to produce this document. No network requests were made to any backend in Phases 1–2; Phase 3/3A made only read-only, non-mutating network observations against the live dev/preview instances, with explicit user-entered credentials never inspected or recorded, and no password/token/cookie/Authorization header value was written anywhere in this document.**
