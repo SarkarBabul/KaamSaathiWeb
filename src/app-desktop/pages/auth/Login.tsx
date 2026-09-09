@@ -92,6 +92,19 @@ export default function Login() {
     navigate(getRedirectRoute(role), { replace: true });
   };
 
+  // Switching modes clears the in-progress OTP step and any stale values
+  // from the previous mode's form, so re-entering OTP mode always starts
+  // at "send OTP" rather than resuming a stale "verify OTP" step for a
+  // different mobile number.
+  const switchMode = (next: LoginMode) => {
+    setOtpToken(null);
+    setOtpMobile("");
+    otpRequestForm.reset();
+    otpVerifyForm.reset();
+    forgetForm.reset();
+    setMode(next);
+  };
+
   const onPasswordSubmit = async (values: PasswordFormValues) => {
     setSubmitting(true);
     try {
@@ -156,7 +169,7 @@ export default function Login() {
       const res = await forgetPassword(values);
       if (res.status === "SUCCESS") {
         toast.success("Password updated — please log in");
-        setMode("password");
+        switchMode("password");
       } else {
         toast.error(res.message ?? "Could not reset password");
       }
@@ -199,10 +212,10 @@ export default function Login() {
                 Sign in
               </Button>
               <div className="flex justify-between text-sm">
-                <button type="button" className="text-primary underline" onClick={() => setMode("otp")}>
+                <button type="button" className="text-primary underline" onClick={() => switchMode("otp")}>
                   Sign in with OTP
                 </button>
-                <button type="button" className="text-primary underline" onClick={() => setMode("forget")}>
+                <button type="button" className="text-primary underline" onClick={() => switchMode("forget")}>
                   Forgot password?
                 </button>
               </div>
@@ -221,7 +234,7 @@ export default function Login() {
               <Button type="submit" className="w-full" disabled={submitting}>
                 Send OTP
               </Button>
-              <button type="button" className="text-sm text-primary underline" onClick={() => setMode("password")}>
+              <button type="button" className="text-sm text-primary underline" onClick={() => switchMode("password")}>
                 Back to password sign in
               </button>
             </form>
@@ -247,14 +260,23 @@ export default function Login() {
               <div className="space-y-2">
                 <Label htmlFor="fMobile">Mobile number</Label>
                 <Input id="fMobile" inputMode="numeric" {...forgetForm.register("mobileNumber")} />
+                {forgetForm.formState.errors.mobileNumber && (
+                  <p className="text-sm text-destructive">{forgetForm.formState.errors.mobileNumber.message}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="fOtp">OTP</Label>
                 <Input id="fOtp" {...forgetForm.register("otpCode")} />
+                {forgetForm.formState.errors.otpCode && (
+                  <p className="text-sm text-destructive">{forgetForm.formState.errors.otpCode.message}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="fNewPassword">New password</Label>
                 <Input id="fNewPassword" type="password" {...forgetForm.register("newPassword")} />
+                {forgetForm.formState.errors.newPassword && (
+                  <p className="text-sm text-destructive">{forgetForm.formState.errors.newPassword.message}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="fConfirmPassword">Confirm password</Label>
@@ -266,7 +288,7 @@ export default function Login() {
               <Button type="submit" className="w-full" disabled={submitting}>
                 Reset password
               </Button>
-              <button type="button" className="text-sm text-primary underline" onClick={() => setMode("password")}>
+              <button type="button" className="text-sm text-primary underline" onClick={() => switchMode("password")}>
                 Back to sign in
               </button>
             </form>

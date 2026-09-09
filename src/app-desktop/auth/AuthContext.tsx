@@ -1,4 +1,4 @@
-import { createContext, useCallback, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { clearSession, readSession, writeSession } from "@/app-desktop/auth/authStorage";
 import { registerUnauthorizedHandler } from "@/app-desktop/api/httpClient";
 import type { LoginResponse, Session, UserRole } from "@/app-desktop/types/auth";
@@ -55,7 +55,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // A 401 from any API call forces logout — the Angular app never wired
   // this despite having a token that could expire server-side.
-  useMemo(() => {
+  // useEffect (not useMemo, which is for pure value computation and isn't
+  // guaranteed to run exactly once) registers this side effect safely.
+  useEffect(() => {
     registerUnauthorizedHandler(() => {
       clearSession();
       setSession(null);

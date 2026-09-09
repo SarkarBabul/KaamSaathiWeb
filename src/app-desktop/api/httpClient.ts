@@ -49,7 +49,13 @@ async function request<T>(
   path: string,
   options?: { body?: unknown; params?: Record<string, string | number | undefined>; headers?: HeadersInit },
 ): Promise<T> {
-  const url = new URL(path, baseUrlFor(target));
+  // Deliberately NOT `new URL(path, baseUrl)`: when `path` starts with "/"
+  // (every caller in this app does), the WHATWG URL resolver treats it as
+  // an absolute-path reference and replaces the base's own path entirely —
+  // e.g. base "https://host/api" + path "/v2/getAllSites" resolves to
+  // "https://host/v2/getAllSites", silently dropping "/api". Concatenating
+  // first, then parsing, preserves the base path.
+  const url = new URL(`${baseUrlFor(target)}${path}`);
   if (options?.params) {
     for (const [key, value] of Object.entries(options.params)) {
       if (value !== undefined) url.searchParams.set(key, String(value));
@@ -93,7 +99,7 @@ export const api = {
 };
 
 export async function postBlob(target: ApiTarget, path: string, body?: unknown): Promise<Blob> {
-  const url = new URL(path, baseUrlFor(target));
+  const url = new URL(`${baseUrlFor(target)}${path}`);
   const headers = buildHeaders();
   headers.set("Content-Type", "application/json");
 
