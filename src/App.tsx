@@ -1,4 +1,4 @@
-import { lazy } from "react";
+import { lazy, Suspense } from "react";
 import { useEffect } from "react";
 import { HelmetProvider } from "react-helmet-async";
 import { Toaster } from "@/components/ui/toaster";
@@ -11,6 +11,10 @@ import { Footer } from "./components/Footer";
 import { KaamSaathiLayout } from "./components/kaamsaathi/KaamSaathiLayout";
 import { CanonicalHead } from "./components/seo/CanonicalHead";
 import { UrlCanonicalizer } from "./components/seo/UrlCanonicalizer";
+import { AuthProvider } from "./app-desktop/auth/AuthContext";
+import { ProtectedRoute } from "./app-desktop/routes/ProtectedRoute";
+import { RoleRoute } from "./app-desktop/routes/RoleRoute";
+import { EnterpriseLayout } from "./app-desktop/layouts/EnterpriseLayout";
 import Home from "./pages/Home";
 import About from "./pages/About";
 import KaamSaathiHome from "./pages/kaamsaathi/KaamSaathiHome";
@@ -30,6 +34,17 @@ import Services from "./pages/Services";
 import Contact from "./pages/Contact";
 import NotFound from "./pages/NotFound";
 
+const Login = lazy(() => import("./app-desktop/pages/auth/Login"));
+const EnterpriseDashboard = lazy(() => import("./app-desktop/pages/enterprise/Dashboard"));
+const EnterpriseUserManagement = lazy(() => import("./app-desktop/pages/enterprise/UserManagement"));
+const EnterpriseSiteManagement = lazy(() => import("./app-desktop/pages/enterprise/SiteManagement"));
+const EnterpriseAttendance = lazy(() => import("./app-desktop/pages/enterprise/Attendance"));
+const EnterprisePayments = lazy(() => import("./app-desktop/pages/enterprise/Payments"));
+const EnterpriseExpenseTracker = lazy(() => import("./app-desktop/pages/enterprise/ExpenseTracker"));
+const EnterpriseReports = lazy(() => import("./app-desktop/pages/enterprise/Reports"));
+const EnterpriseAiDashboard = lazy(() => import("./app-desktop/pages/enterprise/AiDashboard"));
+const EnterpriseSettings = lazy(() => import("./app-desktop/pages/enterprise/Settings"));
+
 const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.KaamSaathi";
 
 const PlayStoreRedirect = () => {
@@ -43,12 +58,14 @@ const queryClient = new QueryClient();
 const App = () => (
   <HelmetProvider>
   <QueryClientProvider client={queryClient}>
+    <AuthProvider>
     <TooltipProvider>
       <Toaster />
       <Sonner />
       <BrowserRouter>
         <UrlCanonicalizer />
         <CanonicalHead />
+        <Suspense fallback={null}>
         <Routes>
           {/* KaamSaathi standalone site — served at root for custom domain */}
           <Route element={<KaamSaathiLayout />}>
@@ -80,6 +97,27 @@ const App = () => (
           <Route path="/contact" element={<Navigate to="/kamet/contact" replace />} />
           <Route path="/kaamsaathi" element={<Navigate to="/" replace />} />
 
+          {/* KaamSaathi Desktop Version — isolated app surface, no public layout */}
+          <Route path="/auth/login" element={<Login />} />
+
+          <Route element={<ProtectedRoute />}>
+            <Route element={<RoleRoute allow={["ENTERPRISE"]} />}>
+              <Route path="/enterprise" element={<EnterpriseLayout />}>
+                <Route index element={<Navigate to="dashboard" replace />} />
+                <Route path="dashboard" element={<EnterpriseDashboard />} />
+                <Route path="user-management" element={<EnterpriseUserManagement />} />
+                <Route path="site-management" element={<EnterpriseSiteManagement />} />
+                <Route path="attendance" element={<EnterpriseAttendance />} />
+                <Route path="payments" element={<EnterprisePayments />} />
+                <Route path="expense-tracker" element={<EnterpriseExpenseTracker />} />
+                <Route path="reports" element={<EnterpriseReports />} />
+                <Route path="ai-dashboard" element={<EnterpriseAiDashboard />} />
+                <Route path="settings" element={<EnterpriseSettings />} />
+                <Route path="*" element={<Navigate to="dashboard" replace />} />
+              </Route>
+            </Route>
+          </Route>
+
           {/* App deep-link redirects to Play Store */}
           <Route path="/attendance" element={<PlayStoreRedirect />} />
           <Route path="/dashboard" element={<PlayStoreRedirect />} />
@@ -92,8 +130,10 @@ const App = () => (
 
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </Suspense>
       </BrowserRouter>
     </TooltipProvider>
+    </AuthProvider>
   </QueryClientProvider>
   </HelmetProvider>
 );
