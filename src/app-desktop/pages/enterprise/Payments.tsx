@@ -14,6 +14,7 @@ import { ErrorState } from "@/app-desktop/components/shared/ErrorState";
 import { ExportButtons } from "@/app-desktop/components/shared/ExportButtons";
 import { useAuth } from "@/app-desktop/auth/useAuth";
 import { usePayments } from "@/app-desktop/hooks/usePayments";
+import { useSites } from "@/app-desktop/hooks/useSites";
 import { exportPaymentsExcel, exportPaymentsPdf } from "@/app-desktop/api/payments.api";
 import { isValidDateRange } from "@/app-desktop/utils/dateRange";
 import { ApiError } from "@/app-desktop/api/httpClient";
@@ -26,12 +27,11 @@ const STATUS_COLORS: Record<string, string> = {
   Pending: "border-transparent bg-pink-100 text-pink-800",
 };
 
-// UNKNOWN — the Angular source defines this tab (All / Site-wise / Site
-// Manager-wise) but the migration blueprint found no branching logic tied
-// to it in the component's TypeScript; it may only affect grouping in the
-// template, which wasn't inspected. Rendered here as a visual-only control
-// with no behavioral difference, matching what's actually confirmed —
-// needs a live-template check before any real grouping is wired to it.
+// Verified against the real Angular template (payments.html): this tab
+// only toggles a CSS `active` class on the tab buttons themselves (3
+// bindings, nothing else) — it has zero effect on data, grouping, or
+// filtering anywhere in the component. Confirmed cosmetic-only; rendered
+// here the same way, with no behavioral branching to match.
 const VIEW_TABS = ["All", "Site-wise", "Site Manager-wise"] as const;
 
 export default function Payments() {
@@ -44,12 +44,13 @@ export default function Payments() {
   const [activeTab, setActiveTab] = useState<(typeof VIEW_TABS)[number]>("All");
 
   const paymentsQuery = usePayments({ enterpriseId: session?.userId, startDate, endDate });
+  const sitesQuery = useSites(session?.userId);
   const records = useMemo(() => paymentsQuery.data ?? [], [paymentsQuery.data]);
 
-  const uniqueSites = useMemo(
-    () => Array.from(new Set(records.map((r) => r.site).filter((v) => v !== "—"))),
-    [records],
-  );
+  // Verified against the real Angular template (payments.html): the Site
+  // filter's options come from MasterDataService.getSites(), not from
+  // unique values in loaded records — only Site Manager does that.
+  const sites = sitesQuery.data ?? [];
   const uniqueManagers = useMemo(
     () => Array.from(new Set(records.map((r) => r.siteManager).filter((v) => v !== "—"))),
     [records],
@@ -155,9 +156,9 @@ export default function Payments() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL}>All sites</SelectItem>
-                {uniqueSites.map((site) => (
-                  <SelectItem key={site} value={site}>
-                    {site}
+                {sites.map((site) => (
+                  <SelectItem key={site.siteId} value={site.siteName}>
+                    {site.siteName}
                   </SelectItem>
                 ))}
               </SelectContent>

@@ -13,6 +13,7 @@ import { ErrorState } from "@/app-desktop/components/shared/ErrorState";
 import { ExportButtons } from "@/app-desktop/components/shared/ExportButtons";
 import { useAuth } from "@/app-desktop/auth/useAuth";
 import { useAttendance } from "@/app-desktop/hooks/useAttendance";
+import { useSites } from "@/app-desktop/hooks/useSites";
 import { exportAttendanceExcel, exportAttendancePdf } from "@/app-desktop/api/attendance.api";
 import { isValidDateRange } from "@/app-desktop/utils/dateRange";
 import { ApiError } from "@/app-desktop/api/httpClient";
@@ -35,15 +36,13 @@ export default function Attendance() {
   const [selectedRole, setSelectedRole] = useState(ALL);
 
   const attendanceQuery = useAttendance({ userId: session?.userId, startDate, endDate });
+  const sitesQuery = useSites(session?.userId);
   const records = useMemo(() => attendanceQuery.data ?? [], [attendanceQuery.data]);
 
-  // Derived exactly like the Angular page: filter dropdown options come
-  // from the currently-loaded records, not a separate lookup call, and
-  // exclude the "—" placeholder used for missing values.
-  const uniqueSites = useMemo(
-    () => Array.from(new Set(records.map((r) => r.site).filter((v) => v !== "—"))),
-    [records],
-  );
+  // Verified against the real Angular template (attendance.html): the Site
+  // filter's options come from MasterDataService.getSites(), not from
+  // unique values in loaded records — only Site Manager does that.
+  const sites = sitesQuery.data ?? [];
   const uniqueManagers = useMemo(
     () => Array.from(new Set(records.map((r) => r.siteManager).filter((v) => v !== "—"))),
     [records],
@@ -122,9 +121,9 @@ export default function Attendance() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL}>All sites</SelectItem>
-                {uniqueSites.map((site) => (
-                  <SelectItem key={site} value={site}>
-                    {site}
+                {sites.map((site) => (
+                  <SelectItem key={site.siteId} value={site.siteName}>
+                    {site.siteName}
                   </SelectItem>
                 ))}
               </SelectContent>

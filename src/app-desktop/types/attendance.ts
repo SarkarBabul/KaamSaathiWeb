@@ -1,18 +1,15 @@
 export type KnownAttendanceStatus = "Present" | "Absent" | "Overtime" | "Half Day";
 
 // Raw shape as returned by POST /v2/reports/attendance/json: an array of
-// site-grouped blocks, each holding the group's own worker rows. Exact raw
-// row field names are not confirmed against a live response (the migration
-// blueprint only documents the flattened shape below) — field lookups here
-// accept the documented name plus a same-meaning fallback so a slightly
-// different backend key doesn't silently produce blank columns.
+// site-grouped blocks, each holding the group's own worker rows. Field
+// names verified directly against the Angular source
+// (enterprise-user/pages/attendance/attendance.ts) — no alternate key
+// names exist on the real payload, so lookups here use the exact field
+// only, matching the confirmed contract rather than guessing at variants.
 export interface AttendanceGroupRow {
   workerId?: number;
-  id?: number;
   workerName?: string;
-  name?: string;
   workerRole?: string;
-  role?: string;
   date?: string;
   status?: string;
 }
@@ -25,11 +22,9 @@ export interface AttendanceGroup {
 
 // Flattened, denormalized shape the UI renders — one row per worker, with
 // the group's site/supervisor copied onto every row. This mirrors the
-// Angular enterprise Attendance page's client-side flatten exactly. Status
-// is passed through as-is rather than coerced to the known set: Angular
-// never validated it at runtime either (the union type there is a compile
-// time-only annotation), so an unexpected backend value is shown verbatim
-// instead of being silently misclassified.
+// Angular enterprise Attendance page's client-side flatten exactly,
+// including its fallback values (verified against the real component: a
+// missing/null status defaults to 'Absent', not a placeholder dash).
 export interface AttendanceRecord {
   workerId: number;
   workerName: string;
@@ -43,13 +38,13 @@ export interface AttendanceRecord {
 export function flattenAttendanceGroups(groups: AttendanceGroup[]): AttendanceRecord[] {
   return groups.flatMap((group) =>
     (group.rows ?? []).map((row) => ({
-      workerId: row.workerId ?? row.id ?? 0,
-      workerName: row.workerName ?? row.name ?? "—",
-      workerRole: row.workerRole ?? row.role ?? "—",
+      workerId: row.workerId ?? 0,
+      workerName: row.workerName ?? "—",
+      workerRole: row.workerRole ?? "—",
       site: group.site ?? "—",
       date: row.date ?? "—",
       siteManager: group.supervisor ?? "—",
-      status: row.status ?? "—",
+      status: row.status ?? "Absent",
     })),
   );
 }
