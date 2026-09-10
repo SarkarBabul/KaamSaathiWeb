@@ -64,12 +64,19 @@ async function request<T>(
 
   const headers = buildHeaders(options?.headers);
   const hasBody = options?.body !== undefined && method !== "GET";
-  if (hasBody) headers.set("Content-Type", "application/json");
+  // FormData (multipart, e.g. Expense Tracker's receipt-upload transaction
+  // endpoints) must reach fetch() as-is: JSON.stringify()-ing a FormData
+  // instance produces a meaningless "{}" body, and setting Content-Type
+  // manually omits the multipart boundary the browser generates on its
+  // own — fetch only adds that boundary when it computes the header
+  // itself from a FormData body.
+  const isFormData = hasBody && options!.body instanceof FormData;
+  if (hasBody && !isFormData) headers.set("Content-Type", "application/json");
 
   const res = await fetch(url.toString(), {
     method,
     headers,
-    body: hasBody ? JSON.stringify(options?.body) : undefined,
+    body: hasBody ? (isFormData ? (options!.body as FormData) : JSON.stringify(options?.body)) : undefined,
   });
 
   if (res.status === 401) {
