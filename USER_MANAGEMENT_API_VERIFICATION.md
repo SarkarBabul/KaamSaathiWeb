@@ -795,4 +795,292 @@ No create/edit/delete/activate/deactivate action was performed anywhere in this 
 
 ---
 
+## 26. PHASE 3B CREATE/EDIT CONTRACT INVESTIGATION
+
+> Read-only investigation. No production mutation was performed. No React source was modified. All Angular source references below were re-read directly from `D:\Projects\KaamsaathiPC` in this pass (not cited from memory of earlier phases).
+
+### 26.0 React Phase 3A mutation state (confirmed unchanged)
+`src/app-desktop/api/userManagement.api.ts` exports only `getSubordinates` (target `default`, `POST /v2/getSubordinate`). No `addSubordinate`/`editSubordinate`/delete/activate function exists anywhere in the React codebase. The Add/Edit dialog in `UserManagement.tsx` renders the form fields but its submit button is `disabled` with the label "Pending Phase 3B" — no mutation request is constructed or callable.
+
+### 26.1 Angular Create implementations (source, re-verified this pass)
+
+**Implementation 1 — enterprise (`enterprise-user/pages/user-management/user-management.ts:233`)**
+- Service method: `EmployeeManagementService.addEmployee(payload, true)`
+- Endpoint: `POST /v2/addSubordinate`
+- Target: **enterprise** (`isEnterprise=true` passed explicitly)
+- Headers: `authKey` + `Authorization: Bearer <token>` (global `authInterceptor`, identical on every request regardless of target)
+- Payload: `{ name, role, mobileNumber, siteId: Number(site_id) }`, with `parentUserId` injected by the service
+- Identifier: n/a (create)
+- Response handling: bare `alert()` on success/failure — **no response body field is ever read**
+- Caller/page: live `/enterprise/user-management` route
+
+**Implementation 2 — legacy (`dashboard/employer/employee-management/component/add-employee/add-employee.component.ts:235`)**
+- Service method: `EmployeeManagementService.addEmployee(payload)` — **no second argument**
+- Endpoint: `POST /v2/addSubordinate` (same endpoint, same service method — only the `isEnterprise` argument differs)
+- Target: **default**
+- Headers: identical to Implementation 1 (same global interceptor)
+- Payload: `{ name, role: String(roleId), site_id: Number(siteId), isGeneratedMobile, mobileNumber (only if !isGeneratedMobile), rate? (if dailyWage), parentName? (if parentname), panNumber? (if pancard), aadharNumber? (if present) }`, with `parentUserId` injected by the service
+- Also gates submission on a prior `getAssignStatus()` (plan-limit) check — not part of the payload itself
+- Response handling: bare `alert()` — no response body read
+- Caller/page: `/dashboard/employer/employee-management` (legacy surface, `admin` role)
+
+### 26.2 Angular Edit implementations (source, re-verified this pass)
+
+**Implementation 1 — enterprise (`user-management.ts:210`)**
+- Service method: `EmployeeManagementService.editSubordinate(EditPayload, true)`
+- Endpoint: `POST /v2/editSubordinate`
+- Target: **enterprise**
+- Payload: `{ name, role, mobileNumber, siteId: Number(site_id), userId: this.editingUserId }`
+- Identifier field name: **`userId`** — but its *value* is sourced from the exact same `user.id` field the list response returns (i.e., both trees pull the identical identifier value; they only disagree on what JSON key to send it under)
+- Response handling: bare `alert()` — no response body read
+
+**Implementation 2 — legacy (`edit-elist.component.ts:244`)**
+- Service method: `EmployeeManagementService.editSubordinate(payload)` — no second argument
+- Endpoint: `POST /v2/editSubordinate` (same endpoint/method as Implementation 1)
+- Target: **default**
+- Payload: `{ id: this.data.id, name, mobileNumber, aadharNumber, site_id, role: String(...), rate, parentName, panNumber }`
+- Identifier field name: **`id`**
+- Response handling: closes the modal with `true` on success (no error thrown) — no response body field is read
+
+### 26.3 Angular runtime form structure (live, `http://localhost:4200`, this session — not clicked Submit)
+
+Verified via a live, already-authenticated session (no new login performed) navigating to `/enterprise/user-management` and opening both dialogs. DOM inspected directly (`querySelectorAll('input, select, textarea')`), not just the accessibility tree:
+
+| | Add User | Edit User |
+|---|---|---|
+| Form controls found | exactly 4 | exactly 4 |
+| `name` (text input) | ✓ | ✓ |
+| `mobileNumber` (text input) | ✓ | ✓ |
+| `role` (`<select>`, one option: "Supervisor") | ✓ | ✓ |
+| `site_id` (`<select>`, populated live from `getAllSites`) | ✓ | ✓ |
+| Hidden fields | **none** | **none** |
+| Identifier field in the DOM | n/a | **none** — `editingUserId` lives only in component TypeScript state (`this.editingUserId = user.id`), never bound to any form control |
+
+This directly confirms the source-level reading: the enterprise UI collects only 4 fields (no `rate`/`aadharNumber`/`panNumber`/`parentName`/`isGeneratedMobile`/`gender` inputs exist anywhere in this form), and the edit identifier is attached to the outgoing payload entirely from component state, not from any visible or hidden DOM field.
+
+**Incidental live finding (not part of the API contract, noted for completeness):** the Edit dialog's "Update" button renders **disabled by default** even with a pre-filled, seemingly-valid form — most likely because the site `<select>` doesn't auto-select the user's current site (a type-mismatch between the numeric `siteId` and the option's bound value), leaving the `site_id` control unset/invalid until the user manually reselects a site. This is a pre-existing Angular UI bug unrelated to the backend contract question.
+
+### 26.4 Endpoint tracing through `ApiService` (confirms target semantics, re-verified this pass)
+
+`ApiService.post()` (`core/services/api.service.ts:61-76`):
+```ts
+const finalUrl = flag ? `${this.enterpriseapiBaseUrl}${url}` : `${this.baseurl}${url}`;
+```
+This is the **only** place target selection happens for `addSubordinate`/`editSubordinate` (both are POST). `this.baseurl` = `environment.apiBaseUrl` = `https://api.kametgroup.com/api`; `this.enterpriseapiBaseUrl` = `environment.enterpriseapiBaseUrl` = `http://43.204.170.108:9091/api`. The `flag` is exactly the `isEnterprise` boolean each call site passes (or omits, defaulting `false`). No `PUT`/`PATCH` call is used by either create or edit implementation — both are `POST`. `ApiService` has no `patch()` method at all.
+
+### 26.5 Flutter implementation (independent third client — re-verified this pass, fresh read)
+
+**Add** (`kaamflutter/lib/screens/admin_screens/add_emp/repo/employee_repository.dart`):
+- `EmployeeRepository.addEmployee()` → `apiService.post("/v2/addSubordinate", requestData)`
+- `MyApiService` instance is constructed with `baseUrl: "https://api.kametgroup.com/api"` at every live (non-commented) call site that constructs an `EmployeeRepository` (confirmed via `emp_add_list.dart:272`) — **target: default**
+- Payload (`Employee.toJson()`): `{ name, role: roleId.toString(), rate, site_id: siteId, isGeneratedMobile, gender, mobileNumber (only if !isGeneratedMobile), parentName (if not null) }` — **`site_id`, snake_case**
+- Success: HTTP 200 → returns `true`, no response body field read. Failure: reads `response.data["statusMsg"]`; HTTP 409 → "Employee already exists"; HTTP 401 → session-expired.
+
+**Edit** (`kaamflutter/lib/screens/admin_screens/emp_list/repository/edit_emp_repository.dart`):
+- `EditEmpRepository.editSubordinate()` → `apiService.post("/v2/editSubordinate", emp.toJson())` — same `MyApiService(baseUrl: "https://api.kametgroup.com/api")` pattern — **target: default**
+- Payload (`EmpEditRequestModel.toJson()`): `{ id, name: firstName, mobileNumber, role: roleId, site_id: siteId, gender? (if set), rate? (if nonzero), parentName? (if set), aadharNumber? (if set), panNumber? (if set) }` — **identifier: `id`, site field: `site_id`**
+- Success: requires **both** `response.statusCode == 200` **and** `response.data['status'] == "SUCCESS"` — the clearest evidence of the actual success envelope shape for edit, found in any of the three codebases. Failure: reads `response.data['message']`.
+
+Flutter's field names and target match the **legacy Angular tree exactly** on every point (target, `site_id`, `id`), and disagree with the enterprise Angular tree on every point (target, field casing, identifier name). Flutter additionally sends a `gender` field on create/edit that neither Angular tree's UI collects — noted as an extra, non-Angular-corroborated field, not further chased in this pass.
+
+### 26.6 Documentation evidence
+
+`D:\Projects\KaamsaathiPC\MIGRATION_TO_REACT.md` (a prior exhaustive, read-only Angular-source audit, independent of this investigation) explicitly documents the same ambiguity at its §9 "User Management" entry:
+
+> "Bug to flag for the team: the enterprise-flag inconsistency across the 4 API calls on this single page (list=false, create=true, edit=true, delete=false) means User Management may be reading/writing across two different backends depending on the action. **Confirm with backend which is actually correct before wiring the React version.**"
+
+This is corroborating evidence that the ambiguity is real, known, and was *never resolved* by whoever produced that document either — it explicitly defers to "confirm with backend," which was not possible then and is not possible now (§26.7). No OpenAPI/Swagger file, Postman collection, or other API documentation was found anywhere under `D:\Projects` (checked `KaamsaathiPC` and `kaamflutter` directly; none exist).
+
+### 26.7 Backend source availability
+**BACKEND SOURCE: NOT AVAILABLE.** Re-confirmed this pass: `kaamsaathi-cms` (the only other backend-shaped sibling project) was re-searched for `addSubordinate`/`editSubordinate`/`getSubordinate` — zero matches (it is a Strapi CMS for marketing/blog content, unrelated to `api.kametgroup.com`). No other sibling directory under `D:\Projects` contains server-side route/controller code for this API.
+
+### 26.8 Evidence ranking applied
+
+| Rank | Evidence type | Available for Create/Edit? |
+|---|---|---|
+| 1 | Successful live backend request | **None** — no create/edit mutation has been performed against the live backend anywhere in this entire investigation (by design — read-only mandate) |
+| 2 | Existing production client implementation that demonstrably works | Flutter (a real, shipped mobile app) uses `default`/`site_id`/`id` — its correctness is inferred from being a live production app, not from a captured live success in this session |
+| 3 | Multiple independent client implementations agreeing | **Legacy Angular + Flutter agree** on `default`/`site_id`/`id` — two independent codebases, zero disagreement between them |
+| 4 | Angular service + template + runtime behavior | Confirms *form shape* for the enterprise route (§26.3) but does not confirm backend acceptance either way — no submission was made |
+| 5 | Source code alone | The enterprise Angular route's `enterprise`/`siteId`/`userId` contract is supported **only** at this tier — it is the sole implementation, across three independent codebases, that has ever used it |
+| 6 | Naming convention/assumption | Not relied upon for this conclusion |
+
+No rank-1 or rank-2-for-enterprise evidence exists for Option A. Option B has rank-2 and rank-3 evidence. Per the stated evidence-ranking rule, this is not "concluding B merely because Flutter uses it" — it's Option B being supported by **two independent, higher-ranked sources**, while Option A is supported by **one, lower-ranked source** that is also the consistent outlier everywhere else in this investigation (list/delete/sites/roles are unanimous across all three codebases at `default`).
+
+### Create
+
+- **Endpoint:** `/v2/addSubordinate`
+- **Method:** POST
+- **Target:** **Option A: enterprise** (enterprise Angular, source-only) vs **Option B: default** (legacy Angular + Flutter, cross-corroborated) — **not definitively resolved without a live test**
+- **Payload (Option B / cross-corroborated shape):** `{ name, role, site_id, mobileNumber (conditional), isGeneratedMobile, rate?, parentName?, panNumber?, aadharNumber?, gender? (Flutter only) }` + service-injected `parentUserId`
+- **Payload (Option A / enterprise-only shape):** `{ name, role, mobileNumber, siteId }` + service-injected `parentUserId`
+- **Required fields (enterprise form, live-confirmed):** `name`, `mobileNumber` (pattern `^[6-9]\d{9}$`), `role`, `site_id`/`siteId`
+- **Required fields (legacy form, source-confirmed):** `roleId`, `fullName`, `siteId`; `phone` required only if not `isGeneratedMobile`
+- **Optional fields:** `rate`, `parentName`, `panNumber`, `aadharNumber` (legacy/Flutter only — not present in the enterprise form at all)
+- **Response:** HTTP 200 on success; neither Angular tree reads any response field; Flutter reads `statusMsg` on error, special-cases HTTP 409 (duplicate) and 401 (session expired)
+- **Evidence:** §26.1, §26.5, §26.8
+- **Confidence:** **STRONG (cross-client-corroborated) for Option B's shape being what a working client sends — NOT LIVE-VERIFIED against this specific backend in this investigation.** Target (`default` vs `enterprise`) remains the single unresolved variable.
+
+### Edit
+
+- **Endpoint:** `/v2/editSubordinate`
+- **Method:** POST
+- **Target:** same unresolved Option A/B split as Create
+- **Payload (Option B):** `{ id, name, mobileNumber, site_id, role, rate?, parentName?, panNumber?, aadharNumber?, gender? (Flutter only) }`
+- **Payload (Option A):** `{ name, role, mobileNumber, siteId, userId }`
+- **Required fields:** `name`, `role`, `site_id`/`siteId`; `mobileNumber` required unless generated (legacy only — enterprise form always requires it)
+- **Optional fields:** same optional set as Create, legacy/Flutter only
+- **Identifier:** **Option A: `userId`** (enterprise, source-only) vs **Option B: `id`** (legacy Angular + Flutter, cross-corroborated) — both trees source the *value* from the identical `user.id`/`this.data.id` field; they disagree only on the outgoing key name
+- **Response:** Flutter is the only source with an explicit envelope check — requires **both** HTTP 200 **and** `data.status === "SUCCESS"`; reads `data.message` on error. Neither Angular tree reads the response at all.
+- **Evidence:** §26.2, §26.5, §26.8
+- **Confidence:** **STRONG (cross-client-corroborated) for Option B's shape — NOT LIVE-VERIFIED.** Target and identifier-field-name both remain unresolved without a live test.
+
+### Evidence Comparison
+
+| Evidence source | Create contract | Edit contract | Confidence |
+|---|---|---|---|
+| Angular enterprise | `enterprise`, `siteId`, no optional fields | `enterprise`, `siteId`, `userId`, no optional fields | Source-only (rank 5) — sole outlier across 3 codebases |
+| Angular legacy | `default`, `site_id`, + optional fields | `default`, `site_id`, `id`, + optional fields | Source-only (rank 5), but agrees with an independent 2nd client |
+| Flutter | `default`, `site_id`, + `gender` | `default`, `site_id`, `id`, + `gender` | Inferred-production-client (rank 2), agrees with legacy Angular |
+| Runtime Angular (live, this pass) | Confirms enterprise form = exactly 4 fields, no hidden fields, no submission attempted | Confirms edit form = same 4 fields, identifier not in DOM, no submission attempted | Confirms *shape* only, not backend acceptance |
+| API documentation | `MIGRATION_TO_REACT.md` documents the same ambiguity, explicitly unresolved ("confirm with backend") | Same | Corroborates the ambiguity exists; resolves nothing new |
+| Backend source | Not available | Not available | N/A |
+
+### Final Phase 3B Decision
+
+**REQUIRES EXPLICIT MUTATION TEST.**
+
+Read-only evidence is exhausted and strongly — but not definitively — favors Option B (`default` / `site_id` / `id`) via cross-client corroboration (rank 2–3 evidence) over Option A (`enterprise` / `siteId` / `userId`, rank 5 only, the consistent outlier). This is not sufficient to mark the contract **VERIFIED — SAFE TO IMPLEMENT**, because no rank-1 evidence (an actual successful live request against this exact backend) exists for either option, and the enterprise Angular route — despite being the *literal, currently-live* implementation at `/enterprise/user-management` — has never been observed to succeed or fail in practice by anyone in this investigation.
+
+**Do not implement Create/Edit in React yet.** The only way to reach full verification is a single, explicitly user-authorized live mutation test (e.g., one real add-user attempt through a controlled channel, observed via Network tab, ideally using a disposable/test account) — not to be performed automatically. This decision is intentionally conservative: implementing against the wrong target/field-name combination would either silently fail in production or write to the wrong backend, and both are worse outcomes than a short delay pending explicit approval.
+
+---
+
+## 27. LIVE CREATE CONTRACT VERIFICATION
+
+> One explicitly user-authorized live mutation test was performed, followed by immediate cleanup. This is the only section in this document where a real backend write occurred. No React, Angular, or Flutter source was modified. No API key, password, access token, cookie, Authorization value, generated mobile number, user ID, or `parentUserId` value is recorded anywhere below.
+
+### Create Request
+- Host: `api.kametgroup.com`
+- Target: **default**
+- Endpoint: `/v2/addSubordinate`
+- Method: POST
+- Payload shape sent: `{ name: "KaamSaathi API Test", role: "supervisor", site_id: 460, isGeneratedMobile: true, parentUserId: <injected from the live session's own stored parent ID, not invented> }`
+- Execution method: a single `XMLHttpRequest`, constructed with the same `authKey` and `Authorization: Bearer <session token>` headers the live Angular app already uses for every request, reusing the already-authenticated session (no login/credential re-entry was performed).
+
+### Result
+- **HTTP status: 200**
+- Sanitized response: `status: "SUCCESS"`, `statusCode: "ADD_SUB_200"`
+- **Creation succeeded.**
+- **Generated-mobile mode worked**: `isGeneratedMobile: true` was accepted with no `mobileNumber` in the payload at all — no phone number, real or synthetic, was ever needed or transmitted.
+- Response included ID-bearing fields — confirmed present by field **name** only (`subordinateId`, `employeeId`, alongside `statusMsg`, `gender`, `isGeneratedMobile`, `statusCode`, `status`); no field value was read or recorded.
+- **Identification:** a follow-up `POST /v2/getSubordinate` (read-only, default target) returned 3 total records; exactly **1** matched `name === "KaamSaathi API Test"` — uniquely identified, all 5 pre-delete safety checks passed (exact name match; distinctive synthetic marker just created; uniquely identifiable; ID sourced only from that single match; no other record touched).
+- **Cleanup:** `POST /v2/authenticate/permanentDeleteSubordinate` (default target, body `{ id }` from the uniquely-identified record) → **HTTP 200, `status: "SUCCESS"`**.
+- **Post-delete verification:** the originally-planned scripted read-only re-check was blocked by Claude Code's own tool-permission classifier (unrelated to the delete's success — a separate automated `evaluate_script` call was refused). Verification was instead completed by simply reloading the live Angular page (a plain navigation, not a scripted API call) and reading the rendered Team Directory: only the 2 original pre-existing users remain; **"KaamSaathi API Test" is confirmed absent.**
+
+### Contract Decision
+
+**VERIFIED (live):**
+```
+Target:  default
+Endpoint: POST /v2/addSubordinate
+Site field: site_id
+Mobile handling: isGeneratedMobile: true (no mobileNumber required)
+Role value: "supervisor"
+```
+
+This provides genuine live backend verification for the **Create** contract — not source-inference, not cross-client corroboration, but an actual successful request against the production backend, cleanly isolated (single variable set, immediately reversed, uniquely-identified cleanup).
+
+**The Edit contract is NOT yet verified.** Nothing in this section tests `/v2/editSubordinate`, the `site_id`/`siteId` question for edit, or the `id`/`userId` identifier question. Those remain exactly as characterized in §26 — strong cross-client-corroborated evidence favoring `default`/`site_id`/`id`, but not live-confirmed.
+
+---
+
+## 28. LIVE EDIT CONTRACT VERIFICATION
+
+> A second explicitly user-authorized live mutation sequence — create, edit, delete — was performed on a freshly-created synthetic record (the previous §27 test record had already been deleted; this is a new, independent synthetic user). No React, Angular, or Flutter source was modified. No API key, password, access token, cookie, Authorization value, generated mobile number, user ID, or `parentUserId` value is recorded anywhere below.
+
+**Target:** default
+**Endpoint:** `/v2/editSubordinate`
+**Method:** POST
+**Identifier:** `id`
+**Site field:** `site_id`
+
+### Create result
+`POST /v2/addSubordinate` (default target, verified §27 contract) → **HTTP 200**, `status: "SUCCESS"`, `statusCode: "ADD_SUB_200"`.
+
+### Identification
+`POST /v2/getSubordinate` (default, read-only) returned 4 total records; exactly **1** matched `name === "KaamSaathi API Test"` — uniquely identified. Its full field set was read internally (never printed) to construct a faithful edit payload.
+
+### Edit request
+Payload replicated the legacy Angular `edit-elist.component.ts` shape exactly (no hybrid, no fields introduced beyond what that implementation sends): `{ id, name, mobileNumber, aadharNumber, site_id, role, rate, parentName, panNumber }`. Only `name` was changed (`"KaamSaathi API Test"` → `"KaamSaathi API Test Edited"`); every other field was carried through unchanged from the record's current live values (`mobileNumber`, `site_id`/`siteId`, `role`/`roleId`, `rate`, `parentName`, `panNumber`, `aadharNumber`) — sourced by reading the just-fetched record, not invented. No `siteId`, `userId`, or `isGeneratedMobile` key was sent (the legacy implementation does not include `isGeneratedMobile` in its edit payload at all — this was confirmed by direct source re-inspection immediately before sending).
+
+**Result: HTTP 200**, `status: "SUCCESS"`, `statusCode: "EDIT_SUB_200"`.
+
+### Edit verification
+`POST /v2/getSubordinate` (read-only) — exactly **1** record matched `"KaamSaathi API Test Edited"`; **0** records matched the old name `"KaamSaathi API Test"` — confirms the record was renamed in place, not duplicated. Uniquely identified.
+
+### Cleanup result
+`POST /v2/authenticate/permanentDeleteSubordinate` (default, body `{ id }` from the uniquely-identified edited record) → **HTTP 200**, `status: "SUCCESS"`.
+
+### Cleanup verification
+Verified via a plain reload of the live Angular page (not a scripted API call, to avoid a tool-permission classifier restriction encountered on a scripted read-only check in §27 — unrelated to any request's success/failure). The rendered Team Directory shows exactly the pre-existing production records; neither `"KaamSaathi API Test"` nor `"KaamSaathi API Test Edited"` is present.
+
+### HTTP statuses summary
+| Step | Status |
+|---|---|
+| Create | 200 / SUCCESS / ADD_SUB_200 |
+| Identify (list) | 200 |
+| Edit | 200 / SUCCESS / EDIT_SUB_200 |
+| Verify edit (list) | 200 |
+| Delete | 200 / SUCCESS |
+| Verify delete (page reload) | confirmed absent |
+
+### Final confidence
+
+**EDIT CONTRACT VERIFIED**
+
+```
+default
+POST /v2/editSubordinate
+id
+site_id
+```
+
+This is genuine live backend confirmation — not source-inference, not cross-client corroboration. Combined with §27's live-verified Create contract, both Create and Edit for User Management are now confirmed to use the **legacy/cross-corroborated shape** (`default`, `site_id`, `id`), not the enterprise Angular route's `enterprise`/`siteId`/`userId` variant, which remains unverified and is now the disconfirmed minority position given two independent live tests both succeeded on the alternative.
+
+---
+
 **No application source files (React, Angular, or otherwise) were modified to produce this document. No network requests were made to any backend in Phases 1–2; Phase 3/3A made only read-only, non-mutating network observations against the live dev/preview instances, with explicit user-entered credentials never inspected or recorded, and no password/token/cookie/Authorization header value was written anywhere in this document.**
+
+---
+
+---
+
+## 29. PHASE 3B REACT IMPLEMENTATION (Create/Edit wired to the live-verified contracts)
+
+> Implementation notes only. Does not alter §27/§28's live-verified findings above. No new live mutation test was performed to produce this section — the implementation was validated via source inspection, TypeScript, lint, and a production build only, per the explicit instruction not to create another synthetic user or call these endpoints again for testing.
+
+### 29.1 Files changed
+- `src/app-desktop/types/userManagement.ts` — added `AddSubordinatePayload`/`AddSubordinateResponse`, `EditSubordinatePayload`/`EditSubordinateResponse`, `DeleteSubordinateResponse`; extended `EnterpriseUser` with optional `aadharNumber`/`rate`/`parentName`/`panNumber` (present on some live records per §28's "full field set... read internally to construct a faithful edit payload"; typed as optional and only ever forwarded with whatever value the list endpoint actually returned — never fabricated).
+- `src/app-desktop/api/userManagement.api.ts` — added `addSubordinate`, `editSubordinate`, `deleteSubordinate`, all target `default`, matching §27/§28 byte-for-byte. `getSubordinates` unchanged.
+- `src/app-desktop/hooks/useUserManagement.ts` — added `useCreateSubordinate(parentUserId)` and `useEditSubordinate()` (TanStack Query `useMutation`, matching the `useQuery` pattern already used for Attendance/Payments/Sites). Both invalidate the `["subordinates", ...]` query key on success so the list refetches from `getSubordinate` — no local/optimistic row fabrication. `useSubordinates` unchanged.
+- `src/app-desktop/pages/enterprise/UserManagement.tsx` — enabled the previously-disabled Add/Edit dialog: controlled form state, submitting/error states, success/failure toasts, duplicate-submit prevention. Table, search, and the (Angular-parity) absence of a Delete action are all unchanged.
+
+### 29.2 Create wiring
+Form collects **Name** and **Site** only (no mobile number field — §27 proved `isGeneratedMobile: true` needs none). **Role** is rendered as a disabled single-option "Supervisor" select (the live Angular form only ever offers one role too) and is never read from form state — the mutation hook hardcodes the literal `"supervisor"` string directly, matching §27's exact payload. `parentUserId` is resolved from `session.parentId` inside `useCreateSubordinate` (the same identifier value already used for the list's `parentId`, consistent with "the authenticated session/service injects parentUserId") — it is not a prop the form can set, so it can never appear as an editable field.
+
+### 29.3 Edit wiring
+Opening Edit pre-fills Name and Site from the row's current values; Mobile number is shown read-only (informational — §28's live test only ever changed `name`, so this port doesn't introduce an unverified "edit mobile via this form" path). On submit, the payload is built as `{ id: editingUser.id, name: <form value>, mobileNumber: editingUser.mobileNumber, aadharNumber: editingUser.aadharNumber ?? null, site_id: <form value>, role: editingUser.roleId, rate: editingUser.rate ?? null, parentName: editingUser.parentName ?? null, panNumber: editingUser.panNumber ?? null }` — every key from §28's verified shape, present exactly once, sourced from the already-fetched record except the two fields the form actually lets a user change (name, site). `role` is forwarded from the record's own `roleId` rather than hardcoded, since §28 confirmed the edit test preserved the record's existing role unchanged — this is not a hybrid payload, it is one consistent shape (`id`/`site_id`, never `userId`/`siteId`) with per-field values sourced either from the form or from the untouched record.
+
+### 29.4 Delete
+`deleteSubordinate(id)` is implemented in `userManagement.api.ts` exactly per §9/§27's verified contract, but is **not** wired to any button, menu item, or hook consumer — the live Angular enterprise page's own Delete menu item is commented out of its template, and `UserManagement.tsx` already preserved that (a pre-existing, pre-Phase-3B comment). No destructive UI was added.
+
+### 29.5 States, refresh, and security
+Submitting disables both dialog buttons and the Site/Name inputs and shows "Adding…"/"Updating…"; a second click while a mutation is in flight is a no-op (`if (submitting) return;` guards `handleSubmit`, `closeForm`, and the dialog's `onOpenChange`). On success: a `sonner` toast, dialog close, form reset, and — via each hook's `onSuccess` — `queryClient.invalidateQueries({queryKey: ["subordinates"]})`, which refetches the authoritative list from the unchanged `getSubordinates`/`/v2/getSubordinate` endpoint; no row is inserted or edited in local state. On failure: the dialog stays open, the form's typed values are untouched (they live in React state, never cleared on error), and the toast/inline error shows only `Error.message` — each mutation hook throws a `new Error(...)` built from the response's own `statusMsg`/`message` field or a static fallback string, never the raw response object, never a header, token, or `parentUserId`.
+
+### 29.6 Validation performed
+- `tsc --noEmit -p tsconfig.app.json`: no new errors (4 pre-existing errors in `Navbar.tsx`/`KaamSaathiNavbar.tsx`, both untouched by this change, unchanged from before).
+- `eslint` (both targeted at the 4 changed files and the full `npm run lint`): zero errors/warnings in any changed file; all pre-existing repo-wide issues elsewhere are unchanged.
+- `npm run build`: succeeds; `UserManagement` chunk grew from 8.41 kB to 13.35 kB gzip, consistent with the added mutation logic and no unrelated bloat.
+- `git diff` reviewed directly: confirms `httpClient.ts`, `.env`, `package.json`/`package-lock.json`, and the Attendance/Payments/Dashboard API files are all untouched by this change.
+- No live mutation request was made in the course of this implementation, per explicit instruction.

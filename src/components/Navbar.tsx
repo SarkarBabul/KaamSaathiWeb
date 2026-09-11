@@ -10,7 +10,7 @@ const navigation = [
   { name: "About Us", href: "/kamet/about" },
   { name: "KaamSaathi App", href: "/" },
   { name: "Digital Marketing", href: "/kamet/services" },
-  { name: "Desktop Version", href: "https://app.kametgroup.com/auth/login", external: true },
+  { name: "Desktop Version", href: "/auth/login" },
   { name: "Contact Us", href: "/kamet/contact" },
 ];
 

@@ -9,8 +9,8 @@ const data: SeoLandingProps = {
     keywords: "contractor attendance app, attendance app for contractors, contractor app for labour, ठेकेदार ऐप, ठेकेदार हाजरी ऐप, contractor labour app",
   },
   hero: {
-    badge: "ठेकेदारों का No.1 ऐप",
-    h1: "Contractor Attendance App — हर ठेकेदार की पहली पसंद",
+    badge: "ठेकेदारों के लिए बनाया गया ऐप",
+    h1: "Contractor Attendance App — ठेकेदारों के लिए बनाया गया",
     hindiSub: "ठेकेदारों के लिए बना हुआ, ठेकेदारों ने टेस्ट किया हुआ हाजरी ऐप।",
     intro: "Mark labour attendance, manage advances, calculate payroll और send reports — ठेकेदारों के लिए सब कुछ एक app में।",
   },
@@ -106,7 +106,7 @@ const data: SeoLandingProps = {
   ],
   finalCta: {
     h2: "ठेकेदार बन कर smart काम करें",
-    sub: "हज़ारों ठेकेदार KaamSaathi के साथ — आज आप भी जुड़िए।",
+    sub: "100+ ठेकेदार KaamSaathi के साथ — आज आप भी जुड़िए।",
   },
 };
 

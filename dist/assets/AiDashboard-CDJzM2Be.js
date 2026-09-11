@@ -1,0 +1,1 @@
+import{j as r}from"./index-o4Fnbsna.js";import{P as e}from"./PlaceholderPage-DdRhq9C4.js";import"./PageHeader-Cj6H-5A9.js";function i(){return r.jsx(e,{title:"AI Dashboard",description:"Real chat, markdown rendering, and history will be ported from the legacy AI chat module in Phase 5."})}export{i as default};

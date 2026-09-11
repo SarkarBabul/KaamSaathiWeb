@@ -1,0 +1,1 @@
+import{a as e}from"./index-o4Fnbsna.js";const n="default";function o(t){return e.post(n,"/v2/getSubordinate",{parentId:t})}function r(t){return e.post(n,"/v2/addSubordinate",t)}function u(t){return e.post(n,"/v2/editSubordinate",t)}function d(t){return e.post(n,"/v2/authenticate/permanentDeleteSubordinate",{id:t})}export{r as a,d,u as e,o as g};

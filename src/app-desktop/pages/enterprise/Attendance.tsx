@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Users, UserCheck, UserX, Clock, Timer } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { GlowCard } from "@/app-desktop/components/fx/GlowCard";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -11,6 +12,8 @@ import { StatusBadge } from "@/app-desktop/components/shared/StatusBadge";
 import { EmptyState } from "@/app-desktop/components/shared/EmptyState";
 import { ErrorState } from "@/app-desktop/components/shared/ErrorState";
 import { ExportButtons } from "@/app-desktop/components/shared/ExportButtons";
+import { PageHeader } from "@/app-desktop/components/shared/PageHeader";
+import { AnimatedItem } from "@/app-desktop/components/fx/AnimatedList";
 import { useAuth } from "@/app-desktop/auth/useAuth";
 import { useAttendance } from "@/app-desktop/hooks/useAttendance";
 import { useSites } from "@/app-desktop/hooks/useSites";
@@ -76,31 +79,36 @@ export default function Attendance() {
   const exportEnabled = isValidDateRange(startDate, endDate);
   const exportQuery = { userId: session?.userId ?? "", startDate, endDate };
 
+  const today = new Date().toLocaleDateString("en-US", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Attendance</h1>
-          <p className="text-sm text-muted-foreground">Site-wise worker attendance for the selected date range.</p>
-        </div>
-        <ExportButtons
-          disabled={!exportEnabled}
-          disabledReason="Select a start and end date to export"
-          fetchPdf={() => exportAttendancePdf(exportQuery)}
-          fetchExcel={() => exportAttendanceExcel(exportQuery)}
-          filenameBase={`AttendanceReport_${startDate || "all"}_${endDate || "all"}`}
-        />
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Super Admin"
+        title="Attendance"
+        trailing={
+          <div className="flex flex-col items-end gap-2">
+            <span>{today}</span>
+            <ExportButtons
+              disabled={!exportEnabled}
+              disabledReason="Select a start and end date to export"
+              fetchPdf={() => exportAttendancePdf(exportQuery)}
+              fetchExcel={() => exportAttendanceExcel(exportQuery)}
+              filenameBase={`AttendanceReport_${startDate || "all"}_${endDate || "all"}`}
+            />
+          </div>
+        }
+      />
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
-        <StatCard label="Total Workers" value={summary.totalWorkers} icon={Users} />
-        <StatCard label="Present" value={summary.presentCount} icon={UserCheck} />
-        <StatCard label="Absent" value={summary.absentCount} icon={UserX} />
-        <StatCard label="Half Day" value={summary.halfDayCount} icon={Clock} />
-        <StatCard label="Overtime" value={summary.overtimeCount} icon={Timer} />
+        <StatCard label="Total Workers" value={summary.totalWorkers} icon={Users} emphasis index={0} />
+        <StatCard label="Present" value={summary.presentCount} icon={UserCheck} tone="positive" index={1} />
+        <StatCard label="Absent" value={summary.absentCount} icon={UserX} tone="negative" index={2} />
+        <StatCard label="Half Day" value={summary.halfDayCount} icon={Clock} tone="warning" index={3} />
+        <StatCard label="Overtime" value={summary.overtimeCount} icon={Timer} tone="info" index={4} />
       </div>
 
-      <Card>
+      <GlowCard>
         <CardHeader>
           <CardTitle className="text-base">Filters</CardTitle>
         </CardHeader>
@@ -162,9 +170,9 @@ export default function Attendance() {
             </Select>
           </div>
         </CardContent>
-      </Card>
+      </GlowCard>
 
-      <Card>
+      <GlowCard lift className="overflow-hidden">
         <CardContent className="p-0">
           {attendanceQuery.isLoading ? (
             <div className="space-y-2 p-6">
@@ -201,7 +209,7 @@ export default function Attendance() {
                 </TableHeader>
                 <TableBody>
                   {filteredRecords.map((record, index) => (
-                    <TableRow key={`${record.workerId}-${record.date}-${index}`}>
+                    <AnimatedItem as={TableRow} key={`${record.workerId}-${record.date}-${index}`} index={index}>
                       <TableCell className="font-medium">{record.workerName}</TableCell>
                       <TableCell>{record.workerRole}</TableCell>
                       <TableCell>{record.site}</TableCell>
@@ -210,14 +218,14 @@ export default function Attendance() {
                       <TableCell>
                         <StatusBadge status={record.status} colorMap={STATUS_COLORS} />
                       </TableCell>
-                    </TableRow>
+                    </AnimatedItem>
                   ))}
                 </TableBody>
               </Table>
             </div>
           )}
         </CardContent>
-      </Card>
+      </GlowCard>
 
     </div>
   );

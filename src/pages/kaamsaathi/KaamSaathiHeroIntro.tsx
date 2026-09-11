@@ -166,7 +166,7 @@ function StaticHeroContent() {
             ))}
           </div>
           <p className="ks-trust-txt">
-            <strong>2,400+ contractors</strong>
+            <strong>100+ contractors</strong>
             <br />
             trust KaamSaathi every day
           </p>

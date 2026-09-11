@@ -31,7 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent } from "@/components/ui/card";
+import { CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -55,6 +55,8 @@ import {
 import { ChartCard } from "@/app-desktop/components/dashboard/ChartCard";
 import { ErrorState } from "@/app-desktop/components/shared/ErrorState";
 import { PageHeader } from "@/app-desktop/components/shared/PageHeader";
+import { GlowCard } from "@/app-desktop/components/fx/GlowCard";
+import { AnimatedItem } from "@/app-desktop/components/fx/AnimatedList";
 import { useAuth } from "@/app-desktop/auth/useAuth";
 import { useSites } from "@/app-desktop/hooks/useSites";
 import {
@@ -143,21 +145,23 @@ interface FinanceSummaryCardProps {
   icon: typeof Wallet;
   tint: string;
   loading: boolean;
+  index: number;
+  emphasis?: boolean;
 }
 
-function FinanceSummaryCard({ label, value, icon: Icon, tint, loading }: FinanceSummaryCardProps) {
+function FinanceSummaryCard({ label, value, icon: Icon, tint, loading, index, emphasis }: FinanceSummaryCardProps) {
   return (
-    <Card className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 rounded-2xl border-none shadow-[0_2px_10px_rgba(0,0,0,0.05)] transition-shadow duration-200 hover:shadow-[0_6px_20px_rgba(0,0,0,0.08)]">
-      <CardContent className="flex items-center justify-between gap-3 p-5">
-        <div className="min-w-0">
-          <p className="truncate text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
-          <p className="mt-1.5 text-[22px] font-bold tabular-nums text-foreground">{loading ? "…" : value}</p>
-        </div>
-        <span className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-xl", tint)}>
-          <Icon className="h-5 w-5" />
-        </span>
-      </CardContent>
-    </Card>
+    <GlowCard index={index} ambient={emphasis} className="flex items-center justify-between gap-3 p-5">
+      <div className="min-w-0">
+        <p className="truncate text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
+        <p className={cn("mt-1.5 font-bold tabular-nums text-foreground", emphasis ? "text-[26px]" : "text-[22px]")}>
+          {loading ? "…" : value}
+        </p>
+      </div>
+      <span className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-xl", tint)}>
+        <Icon className="h-5 w-5" />
+      </span>
+    </GlowCard>
   );
 }
 
@@ -428,11 +432,21 @@ export default function ExpenseTracker() {
           left out here too rather than presented as if they were live. */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <FinanceSummaryCard
+          label="Available Balance"
+          value={formatCurrency(amountQuery.data?.availableBalance)}
+          icon={Wallet}
+          tint="bg-blue-50 text-blue-600"
+          loading={amountQuery.isLoading}
+          index={0}
+          emphasis
+        />
+        <FinanceSummaryCard
           label="Total Received"
           value={formatCurrency(amountQuery.data?.totalReceived)}
           icon={ArrowUpRight}
           tint="bg-emerald-50 text-emerald-600"
           loading={amountQuery.isLoading}
+          index={1}
         />
         <FinanceSummaryCard
           label="Total Spent"
@@ -440,13 +454,7 @@ export default function ExpenseTracker() {
           icon={ArrowDownRight}
           tint="bg-rose-50 text-rose-600"
           loading={amountQuery.isLoading}
-        />
-        <FinanceSummaryCard
-          label="Available Balance"
-          value={formatCurrency(amountQuery.data?.availableBalance)}
-          icon={Wallet}
-          tint="bg-blue-50 text-blue-600"
-          loading={amountQuery.isLoading}
+          index={2}
         />
         <FinanceSummaryCard
           label="Total Dues"
@@ -454,6 +462,7 @@ export default function ExpenseTracker() {
           icon={CircleAlert}
           tint="bg-amber-50 text-amber-600"
           loading={amountQuery.isLoading}
+          index={3}
         />
         <FinanceSummaryCard
           label="Advance Given"
@@ -461,6 +470,7 @@ export default function ExpenseTracker() {
           icon={Landmark}
           tint="bg-violet-50 text-violet-600"
           loading={amountQuery.isLoading}
+          index={4}
         />
       </div>
 
@@ -524,7 +534,7 @@ export default function ExpenseTracker() {
           </ChartCard>
         </div>
       ) : (
-        <Card className="rounded-2xl border-none shadow-[0_2px_10px_rgba(0,0,0,0.05)]">
+        <GlowCard>
           <CardContent className="flex flex-col items-center justify-center gap-2 py-12 text-center">
             <TrendingUp className="h-8 w-8 text-muted-foreground/40" />
             <p className="font-medium text-foreground">No activity to visualize yet</p>
@@ -533,10 +543,10 @@ export default function ExpenseTracker() {
               transaction.
             </p>
           </CardContent>
-        </Card>
+        </GlowCard>
       )}
 
-      <Card className="rounded-2xl border-none shadow-[0_2px_10px_rgba(0,0,0,0.05)]">
+      <GlowCard lift className="overflow-hidden">
         <div className="flex flex-row flex-wrap items-center justify-between gap-4 p-6 pb-4">
           <div>
             <h3 className="text-lg font-bold">Transaction History</h3>
@@ -590,13 +600,10 @@ export default function ExpenseTracker() {
             </div>
           ) : (
             <div className="divide-y">
-              {filteredTransactions.map((t) => {
+              {filteredTransactions.map((t, i) => {
                 const isIncome = t.type === "INCOME";
                 return (
-                  <div
-                    key={t.id}
-                    className="motion-safe:animate-in motion-safe:fade-in flex items-center justify-between gap-4 py-3.5 transition-colors hover:bg-muted/40"
-                  >
+                  <AnimatedItem key={t.id} index={i} interactive className="flex items-center justify-between gap-4 py-3.5">
                     <div className="flex min-w-0 items-start gap-3">
                       <span
                         className={cn(
@@ -644,13 +651,13 @@ export default function ExpenseTracker() {
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
-                  </div>
+                  </AnimatedItem>
                 );
               })}
             </div>
           )}
         </CardContent>
-      </Card>
+      </GlowCard>
 
       {/*
         MUTATION NOT LIVE-VERIFIED. addExpenseTransaction/

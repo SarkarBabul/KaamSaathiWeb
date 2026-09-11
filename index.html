@@ -8,6 +8,17 @@
     <meta name="author" content="Kamet" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="sitemap" type="application/xml" title="Sitemap" href="https://kaamsaathi.app/sitemap.xml" />
+    <!--
+      KaamSaathiNavbar/Footer/Home already declare `font-family: 'Belleza', sans-serif`
+      in their scoped styles, but nothing ever loaded the Belleza webfont — every
+      one of those "Belleza" headings has silently been rendering in the
+      sans-serif fallback since before this change. Loading it here makes the
+      brand's own intended display typeface actually render, on the public site
+      and the Desktop workspace alike.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Belleza&display=swap" rel="stylesheet" />
     <script>
       (function () {
         var canonicalHost = "kaamsaathi.app";

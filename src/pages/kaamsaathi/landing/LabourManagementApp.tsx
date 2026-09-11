@@ -9,7 +9,7 @@ const data: SeoLandingProps = {
     keywords: "labour management app, labour attendance app, construction labour management software, labour payroll app, labour payment app, लेबर मैनेजमेंट ऐप, मजदूरों का हिसाब ऐप",
   },
   hero: {
-    badge: "Trusted by 10,000+ Contractors",
+    badge: "Trusted by 100+ Contractors",
     h1: "Labour Management App for Contractors & Construction Sites",
     hindiSub: "लेबर की हाजरी, payment और advance — एक ही ऐप में पूरा हिसाब रखें।",
     intro: "Manage labour attendance, daily wages, advances and reports — all from your mobile. Offline-ready and built for Indian construction businesses.",

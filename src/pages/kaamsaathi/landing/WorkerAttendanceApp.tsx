@@ -5,11 +5,11 @@ const data: SeoLandingProps = {
   slug: "worker-attendance-app",
   meta: {
     title: "Worker Attendance App for Contractors & Builders | KaamSaathi",
-    description: "KaamSaathi is India's #1 worker attendance app for contractors. Mark daily wage worker attendance, track overtime and generate reports — works offline. मजदूरों की हाजरी मोबाइल से लगाएँ। Free download.",
+    description: "KaamSaathi is a worker attendance app for contractors. Mark daily wage worker attendance, track overtime and generate reports — works offline. मजदूरों की हाजरी मोबाइल से लगाएँ। Free download.",
     keywords: "worker attendance app, daily wage worker attendance app, online worker attendance app, mobile worker attendance app, attendance app for workers, मजदूर हाजरी ऐप, मजदूरों की हाजरी ऐप",
   },
   hero: {
-    badge: "India's #1 Worker Attendance App",
+    badge: "Built for Indian Contractors & Builders",
     h1: "Worker Attendance App — Mark Daily Wage Worker Attendance from Mobile",
     hindiSub: "मजदूरों की हाजरी अब रजिस्टर पर नहीं, मोबाइल से लगाएँ — बस एक टैप में।",
     intro: "Track present, absent, half-day और overtime हर worker के लिए — site पर खड़े-खड़े। Works offline, syncs automatically.",
@@ -20,7 +20,7 @@ const data: SeoLandingProps = {
       "KaamSaathi एक mobile-first worker attendance app है जो खासतौर पर contractors, builders और small construction businesses के लिए बना है। पुराने रजिस्टर, Excel sheets और WhatsApp messages के झंझट को छोड़िए — अब हर daily wage worker की हाजरी आपके मोबाइल में, एक tap में लगती है।",
       "चाहे आप 10 मजदूरों की team चलाते हों या 500+ workers की, KaamSaathi worker attendance app आपके हर site, हर shift और हर party का हिसाब रखता है। Present, absent, half-day और overtime को रंग-कोडित (color-coded) करके दिखाता है ताकि एक नज़र में पूरी team की हालत समझ आ जाए।",
       "Best part? यह app बिना internet के भी काम करता है। Site पर network नहीं है? कोई बात नहीं — हाजरी offline mark करें, network आते ही data अपने आप cloud पर sync हो जाएगा। आपकी सारी attendance information हमेशा safe और बैकअप में रहती है।",
-      "Worker attendance app होने के साथ-साथ KaamSaathi labour payments, advance और daily wage calculation भी करता है। यानी एक ही app में attendance और payroll दोनों का पूरा solution। यही वजह है कि हज़ारों Indian contractors KaamSaathi को पसंद कर रहे हैं।",
+      "Worker attendance app होने के साथ-साथ KaamSaathi labour payments, advance और daily wage calculation भी करता है। यानी एक ही app में attendance और payroll दोनों का पूरा solution। यही वजह है कि 100+ Indian contractors KaamSaathi को पसंद कर रहे हैं।",
     ],
   },
   problems: {
@@ -108,7 +108,7 @@ const data: SeoLandingProps = {
   ],
   finalCta: {
     h2: "आज ही Worker Attendance App Download करें",
-    sub: "हज़ारों ठेकेदार KaamSaathi से हर रोज़ अपने मजदूरों की हाजरी लगा रहे हैं — अब आपकी बारी।",
+    sub: "100+ ठेकेदार KaamSaathi से हर रोज़ अपने मजदूरों की हाजरी लगा रहे हैं — अब आपकी बारी।",
   },
 };
 

@@ -113,3 +113,282 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+/* Scoped theme for the KaamSaathi Desktop Version (app-desktop surface only).
+   Overrides only the accent/primary tokens to match the Angular source of
+   truth's brand orange (#ff5722) — deliberately does NOT touch :root, so the
+   public marketing site's blue/orange theme is completely unaffected. */
+.enterprise-theme {
+  --primary: 14 100% 57%;
+  --primary-foreground: 0 0% 100%;
+  --accent: 14 100% 57%;
+  --accent-foreground: 0 0% 100%;
+  --ring: 14 100% 57%;
+  /* The same gradient EnterpriseSidebar's own mark uses, exposed as a token so
+     the shared (theme-agnostic) account control can pick up each workspace's
+     accent without hardcoding a workspace check. */
+  --ks-avatar-gradient: linear-gradient(135deg, #ff8c4a, #f5793a);
+}
+
+/* Scoped theme for the Employer/Admin workspace (app-desktop surface only).
+   Uses the same green already established for the Desktop Version's login
+   screen (#2ba85b / #1c7a3d) as this surface's accent, kept distinct from
+   Enterprise's orange so the two workspaces read as separate contexts. */
+.employer-theme {
+  --primary: 143 59% 41%;
+  --primary-foreground: 0 0% 100%;
+  --accent: 143 59% 41%;
+  --accent-foreground: 0 0% 100%;
+  --ring: 143 59% 41%;
+  --ks-avatar-gradient: linear-gradient(135deg, #2ba85b, #1c7a3d);
+}
+
+/* ==========================================================================
+   KAAMSAATHI DESKTOP DESIGN SYSTEM
+   ==========================================================================
+   Desktop-specific tokens layered on top of the tokens above rather than
+   replacing them — the public marketing site's own root palette is
+   untouched. Values here are pulled directly from the real, already-live
+   brand surfaces (KaamSaathiNavbar's scoped styles: warm cream nav bg
+   rgba(255,254,248,.92..98), ink text rgba(28,13,0,*), the CTA gradient
+   #ffa51f→#e8940f, the dark-brown support bar #3d1a08), not invented. */
+:root {
+  --ks-ink: 28 13% 8%;
+  --ks-cream: 48 100% 99%;
+  --ks-gold: 38 100% 56%; /* #ffa51f — the public Navbar's own CTA gold */
+  --ks-gold-deep: 33 87% 48%; /* #e8940f — that same CTA's gradient end */
+  --ks-brown: 20 74% 14%; /* #3d1a08 — the public Navbar's support bar */
+
+  /* A display serif is exactly what the public site's own Navbar/Home/
+     Footer already declare (`font-family: 'Belleza', sans-serif`) — now
+     that index.html actually loads the font (it previously didn't), this
+     variable is the one place both those surfaces and the Desktop
+     workspace draw the same "brand display" typeface from. */
+  --ks-display-font: "Belleza", Georgia, "Times New Roman", serif;
+}
+
+/* Signature Desktop background: "Field Blueprint" — a restrained nod to
+   the construction/site-survey world KaamSaathi actually operates in
+   (attendance sheets, site plans), rendered as two flat CSS layers with
+   zero image weight and no animation loop, so it costs nothing at render
+   time and never competes with the data on top of it:
+     1. a faint technical dot-grid (survey/blueprint grid lines)
+     2. two soft corner glows — one in the current workspace's own accent
+        (`--accent`, green for Employer / orange for Enterprise, so each
+        workspace still reads as its own context) and one in the public
+        site's own brand gold, so every workspace still visibly shares one
+        lineage with the marketing site above it.
+   Applied once, on each layout's <main>, rather than copied per page. */
+.ks-field-bg {
+  position: relative;
+  background-color: #f7f6f2;
+  background-image:
+    radial-gradient(circle, hsl(var(--accent) / 0.16) 1px, transparent 1px),
+    radial-gradient(circle at 100% 0%, hsl(var(--accent) / 0.07), transparent 42%),
+    radial-gradient(circle at 0% 100%, hsl(var(--ks-gold) / 0.06), transparent 40%);
+  background-size:
+    22px 22px,
+    100% 100%,
+    100% 100%;
+  background-repeat: repeat, no-repeat, no-repeat;
+  background-attachment: local, fixed, fixed;
+}
+
+@media (prefers-reduced-motion: reduce), (max-width: 640px) {
+  /* Fixed-attachment radial glows force the browser to repaint the whole
+     layer on every scroll frame; on small/low-power viewports (and for
+     anyone who's asked for less motion, a reasonable proxy for "prefers a
+     calmer, simpler UI") that cost isn't worth it for a decorative layer,
+     so it's dropped to the flat dot-grid plus base color only. */
+  .ks-field-bg {
+    background-image: radial-gradient(circle, hsl(var(--accent) / 0.16) 1px, transparent 1px);
+    background-size: 22px 22px;
+    background-attachment: local;
+  }
+}
+
+/* Desktop workspace route-content entrance (RouteTransition.tsx): a small,
+   GPU-cheap fade + upward nudge on the page-content area only — never the
+   persistent shell around it. Disabled entirely under reduced-motion, same
+   as the shimmer on every Skeleton (animate-pulse) used for page-level
+   loading states while a route's lazy chunk resolves. */
+@keyframes ks-route-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.ks-route-transition {
+  animation: ks-route-fade-in 0.22s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ks-route-transition {
+    animation: none;
+  }
+  .animate-pulse {
+    animation: none;
+  }
+}
+
+/* ==========================================================================
+   KAAMSAATHI DESKTOP MOTION & MATERIAL PRIMITIVES
+   ==========================================================================
+   Three restrained treatments shared by every workspace surface. All are
+   CSS-only and event-driven (custom properties written on pointer events,
+   opacity/transform transitions) — no rAF loops, no blur layers, no
+   particle systems — so they cost nothing while idle.
+
+   1. .ks-glow  — "border glow": a pointer-tracked edge light on a card's
+      1.5px border ring plus a faint interior spotlight. Both are painted by
+      pseudo-elements masked to the border, and only become visible on
+      hover / focus-within. Color is the current workspace accent blended
+      toward the public site's brand gold, so Employer glows green-gold and
+      Enterprise glows orange-gold with no per-workspace code.
+   2. .ks-glow--ambient — the ONE "attention" card a page may have: a slow
+      conic sweep along the border. Still subtle (low alpha), and replaced
+      by a static accent border under reduced-motion.
+   3. .ks-enter — list/bento entrance: a short fade + 8px rise with a
+      capped per-item stagger (--ks-i). New keys animate in; existing
+      rows never replay. */
+.ks-glow {
+  position: relative;
+  isolation: isolate;
+  --ks-gx: 50%;
+  --ks-gy: 50%;
+  --ks-go: 0;
+  --ks-glow-size: 240px;
+}
+.ks-glow::before,
+.ks-glow::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: var(--ks-go);
+  transition: opacity 0.35s ease;
+}
+/* Edge light: painted on the padding ring only (mask-composite exclude). */
+.ks-glow::before {
+  padding: 1.5px;
+  background: radial-gradient(
+    var(--ks-glow-size) circle at var(--ks-gx) var(--ks-gy),
+    hsl(var(--accent) / 0.9),
+    hsl(var(--ks-gold) / 0.45) 45%,
+    transparent 72%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  z-index: 1;
+}
+/* Interior spotlight: a much fainter wash under the content. */
+.ks-glow::after {
+  background: radial-gradient(
+    calc(var(--ks-glow-size) * 1.6) circle at var(--ks-gx) var(--ks-gy),
+    hsl(var(--accent) / 0.07),
+    transparent 65%
+  );
+  z-index: -1;
+}
+.ks-glow:hover,
+.ks-glow:focus-within,
+.ks-glow[data-glow-on="true"] {
+  --ks-go: 1;
+}
+
+@property --ks-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes ks-glow-sweep {
+  to {
+    --ks-angle: 360deg;
+  }
+}
+.ks-glow--ambient::before {
+  opacity: 1;
+  background: conic-gradient(
+    from var(--ks-angle),
+    transparent 0deg,
+    hsl(var(--accent) / 0.55) 40deg,
+    hsl(var(--ks-gold) / 0.35) 80deg,
+    transparent 130deg,
+    transparent 360deg
+  );
+  animation: ks-glow-sweep 7s linear infinite;
+}
+.ks-glow--ambient:hover::before,
+.ks-glow--ambient:focus-within::before {
+  animation-play-state: paused;
+  background: radial-gradient(
+    var(--ks-glow-size) circle at var(--ks-gx) var(--ks-gy),
+    hsl(var(--accent) / 0.9),
+    hsl(var(--ks-gold) / 0.45) 45%,
+    transparent 72%
+  );
+}
+
+@keyframes ks-enter-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.ks-enter {
+  animation: ks-enter-rise 0.38s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: var(--ks-delay, 0ms);
+}
+
+/* Standard workspace surface, so pages stop re-declaring the same border/
+   shadow/radius recipe inline. */
+.ks-surface {
+  background: #fff;
+  border: 1px solid #eef0f3;
+  border-radius: 20px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+}
+.ks-surface--hover {
+  transition:
+    transform 0.25s cubic-bezier(0.2, 0.7, 0.2, 1),
+    box-shadow 0.25s ease,
+    border-color 0.25s ease;
+}
+.ks-surface--hover:hover,
+.ks-surface--hover:focus-within {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px -12px hsl(var(--accent) / 0.28), 0 2px 10px rgba(0, 0, 0, 0.04);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ks-glow::before,
+  .ks-glow::after {
+    transition: none;
+  }
+  .ks-glow--ambient::before {
+    animation: none;
+    background: linear-gradient(135deg, hsl(var(--accent) / 0.55), hsl(var(--ks-gold) / 0.35));
+  }
+  .ks-enter {
+    animation: none;
+  }
+  .ks-surface--hover,
+  .ks-surface--hover:hover {
+    transition: none;
+    transform: none;
+  }
+}

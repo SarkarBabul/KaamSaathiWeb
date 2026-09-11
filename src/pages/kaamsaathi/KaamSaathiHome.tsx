@@ -28,11 +28,15 @@ const WHATSAPP_URL =
   "https://wa.me/919997394773?text=Hello!%20I%20want%20to%20know%20more%20about%20KaamSaathi%20app.";
 
 // Data
+// Realistic early-stage figures — deliberately not "50,000+ / 2,400+ /
+// 1,200+ / ₹500Cr+", which overstated KaamSaathi's actual current scale.
+// These are hardcoded marketing constants (no CMS/API backs this section),
+// so update them here whenever real traction numbers change.
 const stats = [
-  { n: 50000, suffix: "+", label: "Workers Managed Daily" },
-  { n: 2400, suffix: "+", label: "Active Contractors" },
-  { n: 1200, suffix: "+", label: "Project Sites" },
-  { prefix: "₹", n: 500, suffix: "Cr+", label: "Payroll Processed" },
+  { n: 1000, suffix: "+", label: "Workers Managed" },
+  { n: 100, suffix: "+", label: "Active Contractors" },
+  { n: 50, suffix: "+", label: "Project Sites" },
+  { prefix: "₹", n: 25, suffix: "L+", label: "Payroll Tracked" },
 ];
 
 const features = [
@@ -504,8 +508,9 @@ export default function KaamSaathiHome() {
                 <span className="ks-tag">Customer Stories</span>
                 <h2>Trusted by contractors across India.</h2>
                 <p>
-                  From small subcontractors to large infrastructure firms,
-                  builders of every size rely on KaamSaathi every day.
+                  From small subcontractors to growing construction
+                  businesses, builders of every size rely on KaamSaathi
+                  every day.
                 </p>
               </div>
             </Reveal>
@@ -572,7 +577,7 @@ export default function KaamSaathiHome() {
                   <WifiOff size={14} /> Offline Ready
                 </span>
                 <span>
-                  <Users size={14} /> 10,000+ Contractors
+                  <Users size={14} /> 100+ Contractors
                 </span>
               </div>
             </Reveal>

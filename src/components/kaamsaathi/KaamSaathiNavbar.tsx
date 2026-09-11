@@ -9,7 +9,7 @@ const navigation = [
   { name: "Home", href: "/" },
   { name: "Features", href: "/features" },
   { name: "Pricing", href: "/pricing" },
-  { name: "Desktop Version", href: "https://app.kametgroup.com/auth/login", external: true },
+  { name: "Desktop Version", href: "/auth/login" },
   { name: "FAQ & Support", href: "/faq" },
   { name: "Blog", href: "/blog" },
 ];
@@ -239,7 +239,13 @@ const navStyles = `
 .ks-nav {
   position: sticky;
   top: 0;
-  z-index: 300;
+  /* Was 300 — raised the Desktop Version workspace's dialogs/sheets/selects
+     (all shadcn/Radix overlays in this app render at z-50) above this navbar
+     when it's reused as the shell for that authenticated surface, rather
+     than the navbar sitting on top of every modal opened there. Nothing in
+     the public site relies on a value between 50 and 300 — kept comfortably
+     under 50 for that stacking, still above ordinary in-flow page content. */
+  z-index: 40;
   background: rgba(255,254,248,.92);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);

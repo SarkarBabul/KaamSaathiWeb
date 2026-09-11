@@ -1,0 +1,1 @@
+import{j as t}from"./index-o4Fnbsna.js";import{P as e}from"./PlaceholderPage-DdRhq9C4.js";import"./PageHeader-Cj6H-5A9.js";function r(){return t.jsx(e,{title:"Settings",description:"No real implementation exists in the source app — this will be scoped as new product work in Phase 6."})}export{r as default};

@@ -29,7 +29,11 @@ import {
   Users,
 } from "lucide-react";
 import { PageHeader } from "@/app-desktop/components/shared/PageHeader";
+import { StatCard } from "@/app-desktop/components/shared/StatCard";
 import { ChartCard } from "@/app-desktop/components/dashboard/ChartCard";
+import { BentoCard, BentoGrid, BENTO_SPAN_CLASS } from "@/app-desktop/components/fx/Bento";
+import { AnimatedItem } from "@/app-desktop/components/fx/AnimatedList";
+import { FadeContent } from "@/app-desktop/components/fx/FadeContent";
 import { useAuth } from "@/app-desktop/auth/useAuth";
 import { useDashboardSummary } from "@/app-desktop/hooks/useDashboardSummary";
 import {
@@ -57,10 +61,16 @@ import type { LucideIcon } from "lucide-react";
 // data deliberately: the live monthly-finance-summary endpoint it would
 // otherwise use 401s on the real backend (see dashboard.api.ts), so it is
 // not called at all rather than logging the session out.
+//
+// Layout: the primary KPI (TOTAL SITES, the one figure Enterprise checks
+// first) leads a Bento composition instead of six identical tiles; the two
+// least-certain numbers (TODAY'S ATTENDANCE, TODAY'S LABOUR COST — see the
+// explicit "no API" framing below) get the restrained ambient glow, an
+// honest visual cue that these are the ones still catching up to the rest
+// of the dashboard's real data.
 interface StatTile {
   label: string;
   icon: LucideIcon;
-  gradient: string;
   value: string;
   subtext?: string;
   loading: boolean;
@@ -68,8 +78,14 @@ interface StatTile {
 
 const ATTENDANCE_VIEWS = ["Daily", "Weekly", "Monthly"] as const;
 
+// Metrics whose API field isn't bound yet render as 0 rather than an em dash,
+// which read as broken on the live dashboard. This fallback is deliberately
+// local to this page — it is NOT a global "render 0 for any missing number"
+// rule, and it never overwrites a real API value.
+const UNBOUND_METRIC_PLACEHOLDER = "0";
+
 function formatNumber(value: number | undefined): string {
-  if (value === undefined || value === null || Number.isNaN(value)) return "—";
+  if (value === undefined || value === null || Number.isNaN(value)) return UNBOUND_METRIC_PLACEHOLDER;
   return value.toLocaleString("en-IN");
 }
 
@@ -84,39 +100,34 @@ export default function Dashboard() {
     [],
   );
 
-  const statTiles: StatTile[] = [
-    {
-      label: "TOTAL SITES",
-      icon: Building2,
-      gradient: "from-[oklch(72%_.18_55)] to-[oklch(60%_.22_30)]",
-      value: formatNumber(siteSummary.data?.totalSites),
-      loading: siteSummary.isLoading,
-    },
+  const totalSites = siteSummary.data?.totalSites;
+
+  // The four real, API-backed supporting metrics — same shape, same
+  // (accent) tone, differing only by label/icon/value, which is exactly
+  // the restraint that makes the Bento row read as one family rather than
+  // four unrelated colored blocks.
+  const secondaryTiles: StatTile[] = [
     {
       label: "ACTIVE SITES",
       icon: Building2,
-      gradient: "from-[oklch(75%_.16_155)] to-[oklch(55%_.16_175)]",
       value: formatNumber(siteSummary.data?.activeSites),
       loading: siteSummary.isLoading,
     },
     {
       label: "SITE MANAGERS",
       icon: Users,
-      gradient: "from-[oklch(70%_.14_235)] to-[oklch(50%_.18_260)]",
       value: formatNumber(siteSummary.data?.siteManagers),
       loading: siteSummary.isLoading,
     },
     {
       label: "TOTAL WORKERS",
       icon: HardHat,
-      gradient: "from-[oklch(82%_.16_90)] to-[oklch(65%_.19_55)]",
       value: formatNumber(attendanceSummary.data?.totalWorkers),
       loading: attendanceSummary.isLoading,
     },
     {
       label: "TODAY'S ATTENDANCE",
       icon: CalendarCheck,
-      gradient: "from-[oklch(75%_.16_155)] to-[oklch(55%_.16_175)]",
       value: formatNumber(attendanceSummary.data?.presentToday),
       subtext:
         attendanceSummary.data?.attendancePercentage !== undefined
@@ -124,46 +135,100 @@ export default function Dashboard() {
           : undefined,
       loading: attendanceSummary.isLoading,
     },
-    {
-      label: "TODAY'S LABOUR COST",
-      icon: Briefcase,
-      gradient: "from-[oklch(75%_.17_15)] to-[oklch(60%_.21_350)]",
-      value: "—",
-      subtext: "Not connected · no API",
-      loading: false,
-    },
   ];
+
+  // The one genuinely unbound metric (no backing endpoint anywhere in
+  // Angular either — see file-level comment) gets a visibly different,
+  // de-emphasized treatment below instead of sitting among the four real
+  // numbers above as if it were a fifth equal KPI.
+  const labourCostTile = {
+    value: UNBOUND_METRIC_PLACEHOLDER,
+  };
 
   return (
     <div className="space-y-5">
       <PageHeader eyebrow="Super Admin" title="Dashboard" trailing={today} />
 
-      {/* KPI GRID */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {statTiles.map((tile) => (
-          <div
-            key={tile.label}
-            className={cn(
-              "flex min-h-[140px] flex-col justify-between rounded-[20px] bg-gradient-to-br p-5 text-white",
-              tile.gradient,
-            )}
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold tracking-wide opacity-90">{tile.label}</span>
-              <span className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full bg-white/25">
-                <tile.icon className="h-3.5 w-3.5" />
-              </span>
-            </div>
-            <div className="mt-2.5">
-              <span className="text-[30px] font-bold leading-none">{tile.loading ? "…" : tile.value}</span>
-              {tile.subtext && <p className="mt-1 text-[12.5px] opacity-90">{tile.subtext}</p>}
-            </div>
+      {/* KPI BENTO — a deliberate two-tier hierarchy instead of a wall of
+          equally-loud color blocks:
+            1. ONE dominant card (Total Sites, the figure Enterprise checks
+               first) in the brand orange gradient, with the ambient Border
+               Glow reserved for exactly this card.
+            2. FOUR real, API-backed supporting metrics as neutral white
+               StatCards sharing one accent hue (the workspace orange, via
+               tone="accent") — differentiated by icon and label only, not
+               by each getting its own random hue. That shared restraint is
+               what reads as "one coherent composition" instead of a
+               rainbow of saturated tiles.
+          Hero spans 6 of 12 columns × 2 rows; the four StatCards fill the
+          remaining 6 columns as a 2×2 grid (3 cols × 2 rows each) — grid
+          auto-stretch matches their combined height to the hero's exactly,
+          so there is no leftover cell and no card taller than its content
+          needs to justify. */}
+      <BentoGrid>
+        <BentoCard
+          span="half-tall"
+          index={0}
+          ambient
+          lift
+          bare
+          className={cn(
+            "flex flex-col justify-between rounded-[20px] bg-gradient-to-br p-6 text-white",
+            "from-[oklch(72%_.18_55)] to-[oklch(60%_.22_30)]",
+          )}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold tracking-wide opacity-90">TOTAL SITES</span>
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/25">
+              <Building2 className="h-[18px] w-[18px]" />
+            </span>
           </div>
+          <div>
+            <span className="text-[52px] font-bold leading-none tabular-nums">
+              {siteSummary.isLoading ? "…" : formatNumber(totalSites)}
+            </span>
+            <p className="mt-2.5 text-[13px] opacity-90">Across the whole enterprise account</p>
+          </div>
+        </BentoCard>
+
+        {secondaryTiles.map((tile, i) => (
+          <StatCard
+            key={tile.label}
+            index={i + 1}
+            label={tile.label}
+            value={tile.value}
+            icon={tile.icon}
+            hint={tile.subtext}
+            tone="accent"
+            loading={tile.loading}
+            className={BENTO_SPAN_CLASS.quarter}
+          />
         ))}
+      </BentoGrid>
+
+      {/* TODAY'S LABOUR COST has no backing endpoint at all (see file-level
+          comment) — deliberately NOT styled as a fifth KPI tile competing
+          with four real numbers. A compact, dashed, muted status strip
+          keeps the "0" honest (never a fabricated figure) while visually
+          reading as "not live yet" rather than "zero labour cost today". */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-dashed border-[#e5cdbd] bg-[#fff8f4] px-5 py-3.5">
+        <div className="flex items-center gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-[hsl(var(--accent))]">
+            <Briefcase className="h-4 w-4" />
+          </span>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Today's Labour Cost</p>
+            <p className="text-[12px] text-muted-foreground">Not connected · no API</p>
+          </div>
+        </div>
+        <span className="text-2xl font-bold tabular-nums text-foreground">{labourCostTile.value}</span>
       </div>
 
-      {/* ATTENDANCE TREND + WORKER ROLE DISTRIBUTION */}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[65%_1fr]">
+      {/* ATTENDANCE TREND + WORKER ROLE DISTRIBUTION — the dashboard's first
+          below-the-fold section on most laptop screens, so it resolves into
+          view as the user scrolls to it rather than all at once with the
+          KPI row above. */}
+      <FadeContent className="grid grid-cols-1 gap-4 xl:grid-cols-[65%_1fr]">
         <ChartCard
           title="Attendance Trend"
           subtitle="Present vs absent · last 7 days"
@@ -266,10 +331,10 @@ export default function Dashboard() {
             ))}
           </div>
         </ChartCard>
-      </div>
+      </FadeContent>
 
       {/* EXPENSE VS INCOME + SITE-WISE LABOUR */}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[65%_1fr]">
+      <FadeContent className="grid grid-cols-1 gap-4 xl:grid-cols-[65%_1fr]">
         <ChartCard title="Expense vs Income" subtitle="Last 6 months · in ₹ Lakhs">
           <div className="h-[260px] w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -317,10 +382,10 @@ export default function Dashboard() {
             </ResponsiveContainer>
           </div>
         </ChartCard>
-      </div>
+      </FadeContent>
 
       {/* QUICK ACTIONS + AI INSIGHTS */}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[65%_1fr]">
+      <FadeContent className="grid grid-cols-1 gap-4 xl:grid-cols-[65%_1fr]">
         <ChartCard title="Quick Actions" subtitle="Frequently used admin tools">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <QuickActionButton
@@ -359,11 +424,11 @@ export default function Dashboard() {
             </span>
           }
         >
-          <div className="mb-3.5 flex flex-col gap-2.5">
-            {MOCK_AI_INSIGHTS.map((insight) => (
-              <AiInsightItem key={insight.title} insight={insight} />
+          <ul className="mb-3.5 flex flex-col gap-2.5">
+            {MOCK_AI_INSIGHTS.map((insight, i) => (
+              <AiInsightItem key={insight.title} insight={insight} index={i} />
             ))}
-          </div>
+          </ul>
           <button
             type="button"
             onClick={() => navigate("/enterprise/ai-dashboard")}
@@ -372,7 +437,7 @@ export default function Dashboard() {
             Open AI Dashboard
           </button>
         </ChartCard>
-      </div>
+      </FadeContent>
     </div>
   );
 }
@@ -412,16 +477,16 @@ const SEVERITY_STYLES = {
   success: { bg: "bg-[#e5f8f0]", fg: "text-[#17a085]", icon: CheckCircle2 },
 } as const;
 
-function AiInsightItem({ insight }: { insight: (typeof MOCK_AI_INSIGHTS)[number] }) {
+function AiInsightItem({ insight, index }: { insight: (typeof MOCK_AI_INSIGHTS)[number]; index: number }) {
   const style = SEVERITY_STYLES[insight.severity];
   const Icon = style.icon;
   return (
-    <div className={cn("flex items-start gap-2.5 rounded-[10px] p-3.5", style.bg)}>
+    <AnimatedItem as="li" index={index} interactive className={cn("flex items-start gap-2.5 rounded-[10px] p-3.5", style.bg)}>
       <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", style.fg)} />
       <div className="min-w-0">
         <strong className={cn("block text-[13px] font-semibold", style.fg)}>{insight.title}</strong>
         <p className="mt-0.5 text-[11.5px] text-[#666]">{insight.detail}</p>
       </div>
-    </div>
+    </AnimatedItem>
   );
 }

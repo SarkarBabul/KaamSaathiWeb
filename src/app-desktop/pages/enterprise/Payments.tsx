@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { IndianRupee, Wallet, HandCoins, AlertCircle } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { GlowCard } from "@/app-desktop/components/fx/GlowCard";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,6 +13,8 @@ import { StatusBadge } from "@/app-desktop/components/shared/StatusBadge";
 import { EmptyState } from "@/app-desktop/components/shared/EmptyState";
 import { ErrorState } from "@/app-desktop/components/shared/ErrorState";
 import { ExportButtons } from "@/app-desktop/components/shared/ExportButtons";
+import { PageHeader } from "@/app-desktop/components/shared/PageHeader";
+import { AnimatedItem } from "@/app-desktop/components/fx/AnimatedList";
 import { useAuth } from "@/app-desktop/auth/useAuth";
 import { usePayments } from "@/app-desktop/hooks/usePayments";
 import { useSites } from "@/app-desktop/hooks/useSites";
@@ -93,21 +96,26 @@ export default function Payments() {
   const exportQuery = { enterpriseId: session?.userId ?? "", startDate, endDate };
   const currency = (value: number) => `₹${value.toLocaleString("en-IN")}`;
 
+  const today = new Date().toLocaleDateString("en-US", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Payments</h1>
-          <p className="text-sm text-muted-foreground">Worker payment ledger for the selected date range.</p>
-        </div>
-        <ExportButtons
-          disabled={!exportEnabled}
-          disabledReason="Select a start and end date to export"
-          fetchPdf={() => exportPaymentsPdf(exportQuery)}
-          fetchExcel={() => exportPaymentsExcel(exportQuery)}
-          filenameBase={`PaymentReport_${startDate || "all"}_${endDate || "all"}`}
-        />
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Super Admin"
+        title="Payments"
+        trailing={
+          <div className="flex flex-col items-end gap-2">
+            <span>{today}</span>
+            <ExportButtons
+              disabled={!exportEnabled}
+              disabledReason="Select a start and end date to export"
+              fetchPdf={() => exportPaymentsPdf(exportQuery)}
+              fetchExcel={() => exportPaymentsExcel(exportQuery)}
+              filenameBase={`PaymentReport_${startDate || "all"}_${endDate || "all"}`}
+            />
+          </div>
+        }
+      />
 
       <div
         className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900"
@@ -119,10 +127,10 @@ export default function Payments() {
       </div>
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <StatCard label="Total Labour Cost" value={currency(summary.totalLabourCost)} icon={IndianRupee} />
-        <StatCard label="Total Paid" value={currency(summary.totalPaid)} icon={Wallet} />
-        <StatCard label="Advance Paid" value={currency(summary.advancePaid)} icon={HandCoins} />
-        <StatCard label="Remaining Due" value={currency(summary.remainingDue)} icon={AlertCircle} />
+        <StatCard label="Total Labour Cost" value={currency(summary.totalLabourCost)} icon={IndianRupee} emphasis index={0} />
+        <StatCard label="Total Paid" value={currency(summary.totalPaid)} icon={Wallet} tone="positive" index={1} />
+        <StatCard label="Advance Paid" value={currency(summary.advancePaid)} icon={HandCoins} tone="info" index={2} />
+        <StatCard label="Remaining Due" value={currency(summary.remainingDue)} icon={AlertCircle} tone="negative" index={3} />
       </div>
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as (typeof VIEW_TABS)[number])}>
@@ -135,7 +143,7 @@ export default function Payments() {
         </TabsList>
       </Tabs>
 
-      <Card>
+      <GlowCard>
         <CardHeader>
           <CardTitle className="text-base">Filters</CardTitle>
         </CardHeader>
@@ -197,9 +205,9 @@ export default function Payments() {
             </Select>
           </div>
         </CardContent>
-      </Card>
+      </GlowCard>
 
-      <Card>
+      <GlowCard lift className="overflow-hidden">
         <CardContent className="p-0">
           {paymentsQuery.isLoading ? (
             <div className="space-y-2 p-6">
@@ -236,8 +244,8 @@ export default function Payments() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredRecords.map((record) => (
-                    <TableRow key={record.payoutId}>
+                  {filteredRecords.map((record, i) => (
+                    <AnimatedItem as={TableRow} key={record.payoutId} index={i}>
                       <TableCell className="font-medium">{record.worker}</TableCell>
                       <TableCell>{record.role}</TableCell>
                       <TableCell>{record.site}</TableCell>
@@ -252,14 +260,14 @@ export default function Payments() {
                       <TableCell>
                         <StatusBadge status={record.status} colorMap={STATUS_COLORS} />
                       </TableCell>
-                    </TableRow>
+                    </AnimatedItem>
                   ))}
                 </TableBody>
               </Table>
             </div>
           )}
         </CardContent>
-      </Card>
+      </GlowCard>
     </div>
   );
 }

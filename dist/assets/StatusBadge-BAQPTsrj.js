@@ -1,0 +1,1 @@
+import{j as n,x as s,d as o}from"./index-o4Fnbsna.js";const d="border-transparent bg-muted text-muted-foreground";function m({status:t,colorMap:e,fallbackClassName:a}){const r=e[t]??a??d;return n.jsx(s,{variant:"outline",className:o(r),children:t})}export{m as S};

@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
-import { MoreHorizontal, Pencil, UserPlus, Upload } from "lucide-react";
+import { MoreHorizontal, Pencil, UserPlus, Upload, Users as UsersIcon, Building2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -19,8 +20,12 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/app-desktop/components/shared/EmptyState";
 import { ErrorState } from "@/app-desktop/components/shared/ErrorState";
+import { PageHeader } from "@/app-desktop/components/shared/PageHeader";
+import { StatCard } from "@/app-desktop/components/shared/StatCard";
+import { GlowCard } from "@/app-desktop/components/fx/GlowCard";
+import { AnimatedItem } from "@/app-desktop/components/fx/AnimatedList";
 import { useAuth } from "@/app-desktop/auth/useAuth";
-import { useSubordinates } from "@/app-desktop/hooks/useUserManagement";
+import { useCreateSubordinate, useEditSubordinate, useSubordinates } from "@/app-desktop/hooks/useUserManagement";
 import { useSites } from "@/app-desktop/hooks/useSites";
 import { ApiError } from "@/app-desktop/api/httpClient";
 import type { EnterpriseUser } from "@/app-desktop/types/userManagement";
@@ -48,35 +53,131 @@ export default function UserManagement() {
   const [searchText, setSearchText] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<EnterpriseUser | null>(null);
+  const [formName, setFormName] = useState("");
+  const [formSiteId, setFormSiteId] = useState<string>("");
 
   const usersQuery = useSubordinates(session?.parentId);
   const sitesQuery = useSites(session?.userId);
+  const createUser = useCreateSubordinate(session?.parentId);
+  const editUser = useEditSubordinate();
+  const submitting = createUser.isPending || editUser.isPending;
+  const mutationError = editingUser ? editUser.error : createUser.error;
 
   const users = useMemo(() => usersQuery.data ?? [], [usersQuery.data]);
   const filteredUsers = useMemo(() => filterUsers(users, searchText), [users, searchText]);
   const sites = sitesQuery.data ?? [];
 
+  // Derived straight from the already-fetched roster — no extra API call,
+  // no fabricated figures. Gives the page a real (if small) Bento summary
+  // instead of dropping straight into the table.
+  const coveredSiteCount = useMemo(() => new Set(users.map((u) => u.siteId)).size, [users]);
+
+  const resetForm = () => {
+    setFormName("");
+    setFormSiteId("");
+    createUser.reset();
+    editUser.reset();
+  };
+
   const openAddUser = () => {
     setEditingUser(null);
+    resetForm();
     setFormOpen(true);
   };
 
   const openEditUser = (user: EnterpriseUser) => {
     setEditingUser(user);
+    setFormName(user.name);
+    setFormSiteId(String(user.siteId));
+    createUser.reset();
+    editUser.reset();
     setFormOpen(true);
   };
 
-  return (
-    <div className="space-y-6">
-      <div>
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Super Admin</p>
-        <h1 className="text-2xl font-semibold">User Management</h1>
-      </div>
+  const closeForm = () => {
+    if (submitting) return;
+    setFormOpen(false);
+    setEditingUser(null);
+    resetForm();
+  };
 
-      <Card>
+  // Task 5/6: validate → submitting state → call the verified API → on
+  // success close/reset + refresh (via the mutation hooks' own
+  // invalidateQueries) + toast; on failure keep the dialog open with the
+  // user's values intact and show only the sanitized Error.message the
+  // hook threw (never the raw response/headers/tokens).
+  const handleSubmit = () => {
+    if (submitting) return;
+
+    const trimmedName = formName.trim();
+    const siteId = Number(formSiteId);
+    if (!trimmedName || !formSiteId || Number.isNaN(siteId)) {
+      toast.error("Name and site are required");
+      return;
+    }
+
+    if (editingUser) {
+      editUser.mutate(
+        {
+          id: editingUser.id,
+          name: trimmedName,
+          mobileNumber: editingUser.mobileNumber,
+          aadharNumber: editingUser.aadharNumber ?? null,
+          site_id: siteId,
+          role: editingUser.roleId,
+          rate: editingUser.rate ?? null,
+          parentName: editingUser.parentName ?? null,
+          panNumber: editingUser.panNumber ?? null,
+        },
+        {
+          onSuccess: () => {
+            toast.success("User updated");
+            setFormOpen(false);
+            setEditingUser(null);
+            resetForm();
+          },
+          onError: (err) => {
+            toast.error(err instanceof Error ? err.message : "Could not update user");
+          },
+        },
+      );
+    } else {
+      createUser.mutate(
+        { name: trimmedName, site_id: siteId },
+        {
+          onSuccess: () => {
+            toast.success("User added");
+            setFormOpen(false);
+            resetForm();
+          },
+          onError: (err) => {
+            toast.error(err instanceof Error ? err.message : "Could not add user");
+          },
+        },
+      );
+    }
+  };
+
+  const today = useMemo(
+    () => new Date().toLocaleDateString("en-US", { weekday: "long", day: "numeric", month: "long", year: "numeric" }),
+    [],
+  );
+
+  return (
+    <div className="space-y-5">
+      <PageHeader eyebrow="Super Admin" title="User Management" trailing={today} />
+
+      {!usersQuery.isLoading && !usersQuery.isError && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <StatCard label="Site Managers" value={users.length} icon={UsersIcon} tone="accent" emphasis index={0} />
+          <StatCard label="Sites Covered" value={coveredSiteCount} icon={Building2} tone="accent" index={1} />
+        </div>
+      )}
+
+      <GlowCard lift>
         <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4 space-y-0">
           <div>
-            <CardTitle className="text-base">Team Directory</CardTitle>
+            <CardTitle className="text-lg font-bold">Team Directory</CardTitle>
             <p className="text-sm text-muted-foreground">
               Manage Site Managers — assign sites, control access, send credentials.
             </p>
@@ -133,15 +234,17 @@ export default function UserManagement() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredUsers.map((user) => (
-                    <TableRow key={user.id}>
+                  {filteredUsers.map((user, i) => (
+                    <AnimatedItem as={TableRow} key={user.id} index={i}>
                       <TableCell>
                         <div className="font-medium">{user.name}</div>
                         <div className="text-xs text-muted-foreground">{user.id}</div>
                       </TableCell>
                       <TableCell>{user.mobileNumber}</TableCell>
                       <TableCell>
-                        <Badge variant="outline">{user.roleName}</Badge>
+                        <Badge variant="outline" className="rounded-full border-none bg-[#e8f2ff] px-3.5 py-1 font-medium text-foreground">
+                          {user.roleName}
+                        </Badge>
                       </TableCell>
                       <TableCell>{user.siteName}</TableCell>
                       <TableCell className="text-right">
@@ -161,49 +264,60 @@ export default function UserManagement() {
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
-                    </TableRow>
+                    </AnimatedItem>
                   ))}
                 </TableBody>
               </Table>
             </div>
           )}
         </CardContent>
-      </Card>
+      </GlowCard>
 
       {/*
-        Structural placeholder only — mirrors the live Angular Add/Edit
-        form fields (name, mobileNumber, role, site_id) but performs NO
-        network call. The addSubordinate/editSubordinate contract (API
-        target + payload key names) is an unresolved conflict between
-        Angular's live enterprise route and the cross-client consensus
-        (legacy Angular + Flutter) — see USER_MANAGEMENT_API_VERIFICATION.md
-        §16/§19. PENDING PHASE 3B API DECISION.
+        Create/edit use the LIVE-VERIFIED contracts from
+        USER_MANAGEMENT_API_VERIFICATION.md §27 (create) and §28 (edit):
+        target `default`, POST /v2/addSubordinate and /v2/editSubordinate,
+        site_id (not siteId), id (not userId). Role is fixed to the single
+        verified value "supervisor" — the live Angular form only ever
+        offers one role option too, so this isn't a UI regression.
       */}
-      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+      <Dialog open={formOpen} onOpenChange={(open) => !open && closeForm()}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editingUser ? "Edit User" : "Add User"}</DialogTitle>
-            <DialogDescription>Login credentials are auto-generated.</DialogDescription>
+            <DialogDescription>
+              {editingUser
+                ? "Update this site manager's name or assigned site."
+                : "Login credentials are auto-generated — no mobile number needed."}
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
+            {mutationError && (
+              <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {mutationError instanceof Error ? mutationError.message : "Something went wrong"}
+              </p>
+            )}
             <div className="space-y-1.5">
               <Label htmlFor="um-name">Full name</Label>
-              <Input id="um-name" placeholder="e.g. Ramesh Yadav" defaultValue={editingUser?.name} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="um-mobile">Mobile number</Label>
               <Input
-                id="um-mobile"
-                placeholder="9911643948"
-                maxLength={10}
-                defaultValue={editingUser?.mobileNumber}
+                id="um-name"
+                placeholder="e.g. Ramesh Yadav"
+                value={formName}
+                onChange={(e) => setFormName(e.target.value)}
+                disabled={submitting}
               />
             </div>
+            {editingUser && (
+              <div className="space-y-1.5">
+                <Label htmlFor="um-mobile">Mobile number</Label>
+                <Input id="um-mobile" value={editingUser.mobileNumber} disabled readOnly />
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>Role</Label>
-                <Select defaultValue={editingUser?.roleId ? "supervisor" : undefined}>
+                <Select value="supervisor" disabled>
                   <SelectTrigger>
                     <SelectValue placeholder="Select role" />
                   </SelectTrigger>
@@ -214,7 +328,7 @@ export default function UserManagement() {
               </div>
               <div className="space-y-1.5">
                 <Label>Assigned site</Label>
-                <Select defaultValue={editingUser ? String(editingUser.siteId) : undefined}>
+                <Select value={formSiteId} onValueChange={setFormSiteId} disabled={submitting}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select site" />
                   </SelectTrigger>
@@ -231,11 +345,11 @@ export default function UserManagement() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setFormOpen(false)}>
+            <Button variant="outline" onClick={closeForm} disabled={submitting}>
               Cancel
             </Button>
-            <Button disabled title="Create/edit API contract is unresolved — pending Phase 3B">
-              {editingUser ? "Update" : "Add"} (Pending Phase 3B)
+            <Button onClick={handleSubmit} disabled={submitting || !formName.trim() || !formSiteId}>
+              {submitting ? (editingUser ? "Updating..." : "Adding...") : editingUser ? "Update" : "Add"}
             </Button>
           </DialogFooter>
         </DialogContent>

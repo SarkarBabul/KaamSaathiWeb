@@ -128,7 +128,7 @@ export function SeoLandingPage({ data }: { data: SeoLandingProps }) {
               <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-4 w-4" /> 100% Secure</span>
               <span className="inline-flex items-center gap-1.5"><Star className="h-4 w-4 fill-current" /> 4.7★ Rated</span>
               <span className="inline-flex items-center gap-1.5"><WifiOff className="h-4 w-4" /> Offline Ready</span>
-              <span className="inline-flex items-center gap-1.5"><Users className="h-4 w-4" /> 10,000+ Contractors</span>
+              <span className="inline-flex items-center gap-1.5"><Users className="h-4 w-4" /> 100+ Contractors</span>
             </div>
           </div>
         </div>

@@ -1,0 +1,1 @@
+import{j as e}from"./index-o4Fnbsna.js";import{P as r}from"./PlaceholderPage-DdRhq9C4.js";import"./PageHeader-Cj6H-5A9.js";function i(){return e.jsx(r,{title:"Reports",description:"Real report generation will be ported from the legacy employer reports module in Phase 5."})}export{i as default};

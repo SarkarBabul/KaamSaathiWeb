@@ -1,0 +1,1 @@
+import{u as t}from"./useQuery-4aTltv8X.js";import{a as r}from"./index-o4Fnbsna.js";function a(e){return r.get("default","/v2/getAllSites",{userId:e})}function i(e){return t({queryKey:["sites",e],queryFn:async()=>(await a(e)).data??[],enabled:!!e})}export{i as u};

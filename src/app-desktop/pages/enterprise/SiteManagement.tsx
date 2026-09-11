@@ -2,12 +2,12 @@ import { useMemo, useState } from "react";
 import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Pencil, Plus } from "lucide-react";
+import { Building2, CheckCircle2, Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -21,7 +21,10 @@ import {
 import { EmptyState } from "@/app-desktop/components/shared/EmptyState";
 import { ErrorState } from "@/app-desktop/components/shared/ErrorState";
 import { PageHeader } from "@/app-desktop/components/shared/PageHeader";
+import { StatCard } from "@/app-desktop/components/shared/StatCard";
 import { StatusBadge } from "@/app-desktop/components/shared/StatusBadge";
+import { GlowCard } from "@/app-desktop/components/fx/GlowCard";
+import { AnimatedItem } from "@/app-desktop/components/fx/AnimatedList";
 import { useAuth } from "@/app-desktop/auth/useAuth";
 import { useSites } from "@/app-desktop/hooks/useSites";
 import { useAddSite, useUpdateSite } from "@/app-desktop/hooks/useSiteManagement";
@@ -84,6 +87,7 @@ export default function SiteManagement() {
 
   const sites = useMemo(() => sitesQuery.data ?? [], [sitesQuery.data]);
   const filteredSites = useMemo(() => filterSites(sites, searchText), [sites, searchText]);
+  const activeSiteCount = useMemo(() => sites.filter((s) => s.status === "ACTIVE").length, [sites]);
 
   const openCreate = () => {
     setEditingSite(null);
@@ -144,7 +148,14 @@ export default function SiteManagement() {
     <div className="space-y-5">
       <PageHeader eyebrow="Super Admin" title="Site Management" trailing={today} />
 
-      <Card className="rounded-2xl border-none shadow-[0_2px_10px_rgba(0,0,0,0.05)]">
+      {!sitesQuery.isLoading && !sitesQuery.isError && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <StatCard label="Total Sites" value={sites.length} icon={Building2} tone="accent" emphasis index={0} />
+          <StatCard label="Active Sites" value={activeSiteCount} icon={CheckCircle2} tone="positive" index={1} />
+        </div>
+      )}
+
+      <GlowCard lift>
         <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4 space-y-0">
           <div>
             <CardTitle className="text-lg font-bold">All Sites</CardTitle>
@@ -191,8 +202,8 @@ export default function SiteManagement() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredSites.map((site) => (
-                    <TableRow key={site.siteId}>
+                  {filteredSites.map((site, i) => (
+                    <AnimatedItem as={TableRow} key={site.siteId} index={i}>
                       <TableCell className="font-medium">{site.siteName}</TableCell>
                       <TableCell>{site.address}</TableCell>
                       <TableCell>{site.pinCode || "—"}</TableCell>
@@ -208,14 +219,14 @@ export default function SiteManagement() {
                           <Pencil className="h-4 w-4" />
                         </Button>
                       </TableCell>
-                    </TableRow>
+                    </AnimatedItem>
                   ))}
                 </TableBody>
               </Table>
             </div>
           )}
         </CardContent>
-      </Card>
+      </GlowCard>
 
       {/*
         Create/edit targets are SOURCE-DERIVED, NOT LIVE-VERIFIED — see
